@@ -31,32 +31,61 @@ class LLMClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
     )
-    def chat(self, messages: list[dict]) -> str:
+    def _call_api(self, messages: list[dict], **kwargs):
+        """底层API调用（用于重试包装）"""
+        return self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            **kwargs
+        )
+
+    def chat(self, messages: list[dict], model: str | None = None) -> str:
         """普通对话
 
         Args:
             messages: 消息列表，格式 [{"role": "user", "content": "..."}]
+            model: 可选，指定模型名称
 
         Returns:
             模型回复文本
         """
-        logger.info(f"调用LLM，消息数: {len(messages)}")
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-        )
-        # 累计Token
-        usage = response.usage
-        self.total_prompt_tokens += usage.prompt_tokens
-        self.total_completion_tokens += usage.completion_tokens
-        logger.info(
-            f"Token使用 - 本次: prompt={usage.prompt_tokens}, "
-            f"completion={usage.completion_tokens} | "
-            f"累计: prompt={self.total_prompt_tokens}, "
-            f"completion={self.total_completion_tokens}"
-        )
-        return response.choices[0].message.content
+        # 保存原始模型
+        original_model = self.model
+        if model:
+            self.model = model
+
+        try:
+            logger.info(f"调用LLM，消息数: {len(messages)}")
+            response = self._call_api(messages)
+            # 累计Token
+            usage = response.usage
+            self.total_prompt_tokens += usage.prompt_tokens
+            self.total_completion_tokens += usage.completion_tokens
+            logger.info(
+                f"Token使用 - 本次: prompt={usage.prompt_tokens}, "
+                f"completion={usage.completion_tokens} | "
+                f"累计: prompt={self.total_prompt_tokens}, "
+                f"completion={self.total_completion_tokens}"
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"API调用失败，启用降级模式: {e}")
+            return self._fallback_response(messages)
+        finally:
+            # 恢复原始模型
+            self.model = original_model
+
+    def _fallback_response(self, messages) -> str:
+        """降级回复"""
+        import random
+        fallback_responses = [
+            "（GM正在沉思中……请稍后再试。）",
+            "（一阵迷雾笼罩了你的视野，你暂时无法感知周围的环境。）",
+            "（时间仿佛静止了，等待命运的齿轮重新转动……）",
+        ]
+        return random.choice(fallback_responses)
 
     @retry(
         stop=stop_after_attempt(3),
