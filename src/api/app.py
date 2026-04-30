@@ -1,9 +1,20 @@
 """FastAPI 应用入口"""
+import os
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from pathlib import Path
+
+
+def resource_path(relative_path):
+    """获取资源绝对路径（兼容普通运行和 PyInstaller 打包）"""
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 app = FastAPI(
     title="游戏大师 Agent API",
@@ -150,7 +161,12 @@ init_v2_agent()
 
 @app.get("/")
 def root():
-    # V2: 重定向到 API 文档，静态前端已迁移到 workbench/
+    """根路由 - 返回前端首页"""
+    frontend_dist = resource_path("workbench/dist")
+    index_path = os.path.join(frontend_dist, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    # 如果没有前端构建产物，重定向到 API 文档
     return RedirectResponse(url="/docs")
 
 
@@ -174,3 +190,28 @@ def run_server():
     """启动服务器"""
     import uvicorn
     uvicorn.run("src.api.app:app", host="0.0.0.0", port=8000, reload=True)
+
+
+# 挂载前端静态文件（必须放在所有 API 路由注册之后）
+frontend_dist = resource_path("workbench/dist")
+if os.path.exists(frontend_dist):
+    # 挂载静态资源（CSS/JS/图片等）
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    # 挂载根路径的静态文件服务（用于前端路由 history 模式）
+    from fastapi.responses import HTMLResponse
+    
+    @app.get("/{path:path}")
+    def catch_all(path: str):
+        """前端路由回退 - 支持 Vue Router history 模式"""
+        # API 路径不走这里
+        if path.startswith("api/") or path.startswith("docs") or path.startswith("redoc") or path.startswith("openapi"):
+            return RedirectResponse(url="/docs")
+        # 尝试返回对应的静态文件
+        file_path = os.path.join(frontend_dist, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        # 否则返回 index.html（前端路由处理）
+        index_path = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return RedirectResponse(url="/docs")

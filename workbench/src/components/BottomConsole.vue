@@ -127,15 +127,27 @@ const turnColumns = [
 
 // === 工作流状态 ===
 const workflowState = ref<any>(null)
+let workflowAbortController: AbortController | null = null
 
 async function loadWorkflowState() {
+  // 取消之前的请求
+  if (workflowAbortController) {
+    workflowAbortController.abort()
+  }
+  workflowAbortController = new AbortController()
+
   try {
-    const res = await fetch('/api/agent/workflow')
+    const res = await fetch('/api/agent/workflow', {
+      signal: workflowAbortController.signal
+    })
     if (res.ok) {
       workflowState.value = await res.json()
     }
-  } catch {
-    // 忽略
+  } catch (e) {
+    // 忽略 AbortError（组件卸载时取消请求）
+    if ((e as Error).name !== 'AbortError') {
+      console.error('加载工作流状态失败:', e)
+    }
   }
 }
 
@@ -143,9 +155,13 @@ async function loadWorkflowState() {
 let workflowTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   workflowTimer = setInterval(loadWorkflowState, 2000)
+  loadWorkflowState() // 立即执行一次
 })
 onUnmounted(() => {
   if (workflowTimer) clearInterval(workflowTimer)
+  if (workflowAbortController) {
+    workflowAbortController.abort()
+  }
 })
 </script>
 
