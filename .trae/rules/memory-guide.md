@@ -20,6 +20,8 @@
 | `记忆/v2.3.md` | **V2 P2 - API扩展** | 216 | Workspace/Skills/Agent API、SSE流式推送、28个新测试 |
 | `记忆/v2.4.md` | **V2 P3 - WorkBench前端** | 216+ | Vue3+TS+Vite+Naive UI、文件浏览器、MD编辑器、Agent监控、SSE事件流 |
 | `记忆/v2.5.md` | **V2 P4 - 集成与清理** | 226 | 清理V1遗留、cli_v2.py、集成测试、性能测试、文档更新 |
+| `记忆/workbench_w1w4.md` | **W1~W4 - WorkBench重构** | 6+ | 新布局、七层导航、多态编辑器、YAML工作流引擎 |
+| `记忆/workbench_w5w7.md` | **W5~W7 - 流程与Pack** | 7+ | Vue Flow编辑器、底部控制台、Agent-Pack导入导出 |
 
 ### 阶段依赖图
 
@@ -27,6 +29,8 @@
 V1: 1 → 2 → 3 → 4 → 5 → 6
                               ↘
 V2:                         v2.1 → v2.2 → v2.3 → v2.4 → v2.5 ✅
+                                      ↘
+WorkBench:                         W1~W4 → W5~W7 ✅
 ```
 
 ---
@@ -72,6 +76,15 @@ V2:                         v2.1 → v2.2 → v2.3 → v2.4 → v2.5 ✅
 | P4、集成清理、测试完善 | `记忆/v2.5.md` 全文 | Execution |
 | 项目整体理解、全貌 | `记忆/v2.5.md` + `记忆/v2.4.md` + `记忆/v2.3.md` + `记忆/v2.2.md` + `记忆/v2.1.md` | Execution |
 | 配置、.env、API Key、DeepSeek | `记忆/1.md` §11 | Activation |
+| WorkBench重构、W1、W2、W3、W4 | `记忆/workbench_w1w4.md` | Execution |
+| WorkBench W5、W6、W7 | `记忆/workbench_w5w7.md` | Execution |
+| 流程编辑器、Vue Flow、WorkflowEditor | `记忆/workbench_w5w7.md` §W5 | Activation |
+| 底部控制台、BottomConsole、SSE | `记忆/workbench_w5w7.md` §W6 | Activation |
+| Agent-Pack、导入导出、pack | `记忆/workbench_w5w7.md` §W7 | Activation |
+| 工作流引擎、WorkflowEngine、YAML | `记忆/workbench_w1w4.md` §W4 | Activation |
+| 多态编辑器、EditorRouter、SkillEditor | `记忆/workbench_w1w4.md` §W3 | Activation |
+| 七层导航、ResourceTree、LeftPanel | `记忆/workbench_w1w4.md` §W2 | Activation |
+| Pinia、app.ts、全局状态 | `记忆/workbench_w1w4.md` §W1 | Activation |
 
 ---
 
@@ -88,6 +101,8 @@ V2:                         v2.1 → v2.2 → v2.3 → v2.4 → v2.5 ✅
 7. **需要修改 LLMClient** → 加载 `记忆/v2.2.md` §2.1（异步化细节）
 8. **用户提到具体表名/函数名找不到** → 加载 `记忆/2.md`（数据库）+ `记忆/3.md`（工具）
 9. **需要理解某个设计决策的来龙去脉** → 加载该阶段记忆文件的 §6（关键设计决策）
+10. **需要继续 WorkBench W5~W7 开发** → 加载 `记忆/workbench_w5w7.md` 全文
+11. **需要理解 WorkBench 完整架构** → 加载 `记忆/workbench_w1w4.md` + `记忆/workbench_w5w7.md`
 
 ---
 
@@ -102,6 +117,6 @@ V2:                         v2.1 → v2.2 → v2.3 → v2.4 → v2.5 ✅
 
 ---
 
-*最后更新: 2026-04-29*  
+*最后更新: 2026-04-30*  
 *关联目录: d:\worldSim-master\.trae\记忆\*  
-*当前阶段: **V2 P4 完成，V2 重构全部完成** ✅*
+*当前阶段: **W1~W7 全部完成** ✅*

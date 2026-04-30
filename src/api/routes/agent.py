@@ -120,3 +120,86 @@ async def reset_session() -> dict:
 
     _game_master.reset()
     return {"status": "ok", "message": "Session reset"}
+
+
+@router.post("/control")
+async def control_agent(action: str):
+    """
+    控制 Agent 执行: pause / resume / step
+    """
+    if _game_master is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    if action == "pause":
+        _game_master.pause()
+    elif action == "resume":
+        _game_master.resume()
+    elif action == "step":
+        _game_master.step_once()
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+
+    return {"state": _game_master.execution_state.value}
+
+
+@router.get("/workflow")
+async def get_workflow():
+    """获取当前工作流定义"""
+    if _game_master is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    workflow = _game_master.workflow
+    return {
+        "state": workflow.state.value,
+        "current_step": workflow.current_step_id,
+        "steps": [
+            {
+                "id": s.id,
+                "type": s.type.value,
+                "next": s.next,
+                "conditions": s.conditions,
+            }
+            for s in workflow.steps.values()
+        ],
+    }
+
+
+class InjectRequest(BaseModel):
+    """指令注入请求"""
+    level: str = "user"  # system / user / override
+    content: str
+
+
+@router.post("/inject")
+async def inject_instruction(body: InjectRequest) -> dict:
+    """
+    注入指令到 Agent。
+    level: system / user / override
+    """
+    if _game_master is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Content is required")
+
+    # 构造注入事件
+    from src.adapters.base import EngineEvent
+    from datetime import datetime
+
+    event = EngineEvent(
+        event_id=f"inject_{_game_master.turn_count + 1}",
+        timestamp=datetime.now().isoformat(),
+        type="player_action",
+        data={"raw_text": body.content, "player_id": "debug", "inject_level": body.level},
+        context_hints=[],
+        game_state={},
+    )
+
+    # 异步处理
+    response = await _event_handler.handle_event(event)
+
+    return {
+        "status": "injected",
+        "level": body.level,
+        "response_id": response.get("response_id"),
+    }

@@ -7,11 +7,13 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from src.adapters.base import EngineAdapter, EngineEvent
 from src.agent.command_parser import CommandParser
 from src.agent.prompt_builder import PromptBuilder
+from src.agent.workflow import WorkflowEngine, StepContext, ExecutionState, StepType
 from src.memory.manager import MemoryManager
 from src.skills.loader import SkillLoader
 
@@ -42,6 +44,13 @@ class GameMaster:
         self.history: list[dict] = []
         self.turn_count = 0
         self.total_tokens = 0
+
+        # 初始化工作流引擎
+        self.workflow = WorkflowEngine()
+        self._register_workflow_handlers()
+        workflow_path = "workflow/main_loop.yaml"
+        if Path(workflow_path).exists():
+            self.workflow.load_from_yaml(workflow_path)
 
     async def handle_event(self, event: EngineEvent) -> dict:
         """
@@ -248,3 +257,97 @@ class GameMaster:
         self.turn_count = 0
         self.total_tokens = 0
         logger.info("Agent 状态已重置")
+
+    def _register_workflow_handlers(self):
+        """注册工作流步骤处理器"""
+
+        async def handle_prompt(ctx: StepContext) -> StepContext:
+            event_dict = {
+                "event_id": ctx.event.get("event_id", ""),
+                "timestamp": ctx.event.get("timestamp", ""),
+                "type": ctx.event.get("type", ""),
+                "data": ctx.event.get("data", {}),
+                "context_hints": ctx.event.get("context_hints", []),
+                "game_state": ctx.event.get("game_state", {}),
+            }
+            ctx.messages = self.prompt_builder.build(
+                event=event_dict,
+                history=self.history,
+                memory_depth="activation",
+            )
+            return ctx
+
+        async def handle_llm_stream(ctx: StepContext) -> StepContext:
+            full_content = ""
+            reasoning_content = ""
+            tokens_used = 0
+
+            async for chunk in self.llm_client.stream(ctx.messages):
+                event_type = chunk["event"]
+                data = chunk["data"]
+                if event_type == "token":
+                    full_content += data["text"]
+                elif event_type == "reasoning":
+                    reasoning_content += data["text"]
+                elif event_type == "llm_complete":
+                    tokens_used = len(full_content) + len(reasoning_content)
+
+            self.total_tokens += tokens_used
+            ctx.llm_output = full_content
+            return ctx
+
+        async def handle_parse(ctx: StepContext) -> StepContext:
+            response = self.command_parser.parse(ctx.llm_output)
+            ctx.parsed_response = response
+            ctx.commands = response.get("commands", [])
+            ctx.memory_updates = response.get("memory_updates", [])
+            return ctx
+
+        async def handle_execute(ctx: StepContext) -> StepContext:
+            if ctx.commands:
+                try:
+                    results = await self.engine_adapter.send_commands(ctx.commands)
+                    ctx.command_results = [
+                        {
+                            "intent": r.intent,
+                            "status": r.status,
+                            "new_value": r.new_value,
+                            "reason": r.reason,
+                            "suggestion": r.suggestion,
+                        }
+                        for r in results
+                    ]
+                except Exception as e:
+                    ctx.command_results = [{"intent": "error", "status": "error", "reason": str(e)}]
+            return ctx
+
+        async def handle_memory(ctx: StepContext) -> StepContext:
+            for update in ctx.memory_updates:
+                try:
+                    self.memory_manager.apply_memory_updates([update])
+                except Exception as e:
+                    logger.error(f"记忆更新失败: {update.get('file')} - {e}")
+            return ctx
+
+        self.workflow.register_handler(StepType.PROMPT, handle_prompt)
+        self.workflow.register_handler(StepType.LLM_STREAM, handle_llm_stream)
+        self.workflow.register_handler(StepType.PARSE, handle_parse)
+        self.workflow.register_handler(StepType.EXECUTE, handle_execute)
+        self.workflow.register_handler(StepType.MEMORY, handle_memory)
+
+    @property
+    def execution_state(self) -> ExecutionState:
+        return self.workflow.state
+
+    def pause(self):
+        self.workflow.pause()
+
+    def resume(self):
+        self.workflow.resume()
+
+    def step_once(self):
+        self.workflow.step_once()
+
+    @property
+    def current_step_id(self) -> str | None:
+        return self.workflow.current_step_id

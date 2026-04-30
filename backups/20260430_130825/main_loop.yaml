@@ -1,0 +1,39 @@
+name: main_loop
+start: build_prompt
+steps:
+  - id: build_prompt
+    type: prompt
+    next: llm_infer
+
+  - id: llm_infer
+    type: llm_stream
+    next: parse_output
+
+  - id: parse_output
+    type: parse
+    next: check_tools
+
+  - id: check_tools
+    type: branch
+    conditions:
+      - if: "len(commands) > 0"
+        next: execute_commands
+    default: update_memory
+
+  - id: execute_commands
+    type: execute
+    next: check_rejected
+
+  - id: check_rejected
+    type: branch
+    conditions:
+      - if: "any(r.get('status') == 'rejected' for r in command_results)"
+        next: build_prompt
+    default: update_memory
+
+  - id: update_memory
+    type: memory
+    next: done
+
+  - id: done
+    type: end

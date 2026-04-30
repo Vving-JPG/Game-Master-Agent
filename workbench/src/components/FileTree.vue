@@ -25,7 +25,7 @@
       :render-prefix="renderPrefix"
       selectable
       style="height: calc(100vh - 160px)"
-      @update:selected-keys="handleSelect"
+      @update:selected-keys="(keys: string[], option: any[]) => handleSelect(keys, option)"
       @update:expanded-keys="handleExpandedKeysChange"
     />
   </div>
@@ -97,7 +97,7 @@ function renderPrefix({ option }: { option: TreeOption }) {
   })
 }
 
-function handleSelect(keys: string[], option: (TreeOption | null)[]) {
+function handleSelect(keys: string[], option: TreeOption[]) {
   selectedKeys.value = keys
   if (keys.length > 0 && option.length > 0) {
     // 只选择文件，不选择文件夹

@@ -68,6 +68,10 @@ app.include_router(skills_router)
 app.include_router(agent_router)
 app.include_router(sse_router)
 
+# Pack 路由（agent-pack 导入/导出）
+from src.api.routes.pack import router as pack_router
+app.include_router(pack_router)
+
 # === V2 Agent 初始化 ===
 def init_v2_agent():
     """初始化 V2 Agent 组件"""
