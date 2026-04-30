@@ -23,13 +23,19 @@ class ResourceTree(QTreeWidget):
     """七层资源导航树"""
     file_selected = pyqtSignal(str, str)  # (file_path, resource_type)
 
-    def __init__(self):
+    def __init__(self, project_root: str = "."):
         super().__init__()
+        self.project_root = Path(project_root)
         self.setHeaderHidden(True)
         self.setColumnCount(1)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
         self.itemClicked.connect(self._on_item_clicked)
+        self._build_tree()
+
+    def set_project_root(self, project_root: str):
+        """设置新的项目根目录"""
+        self.project_root = Path(project_root)
         self._build_tree()
 
     def _build_tree(self):
@@ -40,7 +46,7 @@ class ResourceTree(QTreeWidget):
             node.setData(0, Qt.ItemDataRole.UserRole, {"type": "category", "label": label, "dir_path": dir_path})
 
             if scan_disk and dir_path:
-                self._scan_dir(node, Path(dir_path))
+                self._scan_dir(node, self.project_root / dir_path)
 
             if label == "📊 Runtime":
                 # 运行时固定节点
@@ -189,6 +195,8 @@ class ResourceTree(QTreeWidget):
             self.file_selected.emit(str(new_file), self._detect_resource_type(str(new_file)))
         except Exception as e:
             print(f"创建文件失败: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "创建失败", f"无法创建文件 '{name}':\n{e}")
 
     def _create_new_dir(self, parent_item: QTreeWidgetItem):
         """在选中目录下新建文件夹"""
@@ -214,6 +222,8 @@ class ResourceTree(QTreeWidget):
             self._build_tree()
         except Exception as e:
             print(f"创建文件夹失败: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "创建失败", f"无法创建文件夹 '{name}':\n{e}")
 
     def _rename_item(self, item: QTreeWidgetItem):
         """重命名文件或文件夹"""
@@ -222,8 +232,41 @@ class ResourceTree(QTreeWidget):
             return
 
         old_path = Path(data["path"])
-        # TODO: 实现重命名对话框
-        print(f"重命名: {old_path}")
+        old_name = old_path.name
+
+        # 输入对话框
+        from PyQt6.QtWidgets import QInputDialog
+        new_name, ok = QInputDialog.getText(
+            self,
+            "重命名",
+            f"将 '{old_name}' 重命名为:",
+            text=old_name
+        )
+
+        if not ok or not new_name or new_name == old_name:
+            return
+
+        new_path = old_path.parent / new_name
+
+        # 检查目标是否已存在
+        if new_path.exists():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "重命名失败",
+                f"'{new_name}' 已存在，请选择其他名称。"
+            )
+            return
+
+        try:
+            old_path.rename(new_path)
+            print(f"已重命名: {old_path} -> {new_path}")
+            # 刷新资源树
+            self._build_tree()
+        except Exception as e:
+            print(f"重命名失败: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "重命名失败", f"无法重命名 '{old_name}':\n{e}")
 
     def _delete_item(self, item: QTreeWidgetItem):
         """删除文件或文件夹"""
@@ -232,8 +275,33 @@ class ResourceTree(QTreeWidget):
             return
 
         path = Path(data["path"])
-        # TODO: 实现确认对话框
-        print(f"删除: {path}")
+
+        # 确认对话框
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "确认删除",
+            f"确定要删除 '{path.name}' 吗？\n\n路径: {path}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            if path.is_file():
+                path.unlink()
+                print(f"已删除文件: {path}")
+            elif path.is_dir():
+                import shutil
+                shutil.rmtree(path)
+                print(f"已删除文件夹: {path}")
+            # 刷新资源树
+            self._build_tree()
+        except Exception as e:
+            print(f"删除失败: {e}")
+            QMessageBox.critical(self, "删除失败", f"无法删除 '{path.name}':\n{e}")
 
     def refresh(self):
         """刷新资源树"""

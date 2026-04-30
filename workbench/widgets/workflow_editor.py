@@ -354,5 +354,16 @@ edges:
     def load_from_file(self, path: str):
         """从文件加载"""
         self.current_file = path
-        content = Path(path).read_text(encoding="utf-8")
-        self.scene.load_from_yaml(content)
+        try:
+            content = Path(path).read_text(encoding="utf-8")
+            data = yaml.safe_load(content) if content else {}
+            # 如果文件为空或没有节点，加载默认工作流
+            if not data or not data.get("nodes"):
+                self._load_default_workflow()
+                # 保存默认工作流到文件
+                self._save()
+            else:
+                self.scene.load_from_yaml(content)
+        except Exception as e:
+            print(f"加载工作流失败: {e}")
+            self._load_default_workflow()

@@ -1,2 +1,50 @@
-nodes: []
-edges: []
+edges:
+- from: receive_event
+  to: build_prompt
+- from: build_prompt
+  to: llm_reasoning
+- from: llm_reasoning
+  to: parse_command
+- from: llm_reasoning
+  to: stream_output
+- from: parse_command
+  to: update_memory
+- from: stream_output
+  to: send_command
+- from: update_memory
+  to: end
+- from: send_command
+  to: end
+nodes:
+- id: receive_event
+  type: event
+  x: 50
+  y: 200
+- id: build_prompt
+  type: prompt
+  x: 250
+  y: 200
+- id: llm_reasoning
+  type: llm
+  x: 450
+  y: 200
+- id: parse_command
+  type: command
+  x: 650
+  y: 150
+- id: stream_output
+  type: event
+  x: 650
+  y: 300
+- id: update_memory
+  type: memory
+  x: 850
+  y: 150
+- id: send_command
+  type: event
+  x: 850
+  y: 300
+- id: end
+  type: end
+  x: 1050
+  y: 200

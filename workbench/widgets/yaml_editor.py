@@ -22,10 +22,10 @@ class YamlEditor(QWidget):
     def load(self, content: str, path: str):
         self.current_file = path
         self.editor.setPlainText(content)
-        self.editor.setModified(False)
+        self.editor.document().setModified(False)
 
     def save(self):
         if not self.current_file:
             return
         Path(self.current_file).write_text(self.editor.toPlainText(), encoding="utf-8")
-        self.editor.setModified(False)
+        self.editor.document().setModified(False)

@@ -59,7 +59,7 @@ class MarkdownEditor(QWidget):
                 self.fm_label.setVisible(False)
 
             self.editor.setPlainText(post.content or "")
-            self.editor.setModified(False)
+            self.editor.document().setModified(False)
         except Exception as e:
             self.fm_label.setVisible(False)
             self.editor.setPlainText(f"# 加载失败\n\n{e}")
@@ -74,7 +74,7 @@ class MarkdownEditor(QWidget):
         post["version"] = post.get("version", 0) + 1
         Path(self.current_file).write_text(frontmatter.dumps(post), encoding="utf-8")
         self._original_content = content
-        self.editor.setModified(False)
+        self.editor.document().setModified(False)
 
     def toPlainText(self):
         return self.editor.toPlainText()

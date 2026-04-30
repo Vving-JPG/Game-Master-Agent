@@ -1,10 +1,12 @@
 # workbench/main_window.py
 """主窗口 — 三栏布局 + 顶部工具栏 + 底部控制台"""
 import asyncio
+import os
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QToolBar, QLabel, QComboBox, QDoubleSpinBox,
-    QStatusBar,
+    QStatusBar, QFileDialog, QMenuBar, QMenu,
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
@@ -27,9 +29,13 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
         self.resize(1600, 900)
 
-        # 初始化桥接层
-        self.bridge = AgentBridge(project_root=".")
+        # 当前项目根目录
+        self.project_root = Path(".").resolve()
 
+        # 初始化桥接层
+        self.bridge = AgentBridge(project_root=str(self.project_root))
+
+        self._setup_menubar()
         self._setup_toolbar()
         self._setup_central_widget()
         self._setup_statusbar()
@@ -38,6 +44,38 @@ class MainWindow(QMainWindow):
 
         # 初始化后端
         self._init_backend()
+
+    def _setup_menubar(self):
+        """设置菜单栏"""
+        menubar = self.menuBar()
+
+        # 文件菜单
+        file_menu = menubar.addMenu("文件(&F)")
+
+        # 打开文件夹
+        act_open_folder = QAction("打开文件夹...", self)
+        act_open_folder.setShortcut("Ctrl+O")
+        act_open_folder.triggered.connect(self._on_open_folder)
+        file_menu.addAction(act_open_folder)
+
+        file_menu.addSeparator()
+
+        # 退出
+        act_exit = QAction("退出", self)
+        act_exit.setShortcut("Ctrl+Q")
+        act_exit.triggered.connect(self.close)
+        file_menu.addAction(act_exit)
+
+    def _on_open_folder(self):
+        """打开文件夹对话框"""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择项目文件夹",
+            str(self.project_root.parent),
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if folder:
+            self._switch_project(folder)
 
     def _setup_toolbar(self):
         """顶部工具栏"""
@@ -211,3 +249,40 @@ class MainWindow(QMainWindow):
         """处理强制工具执行"""
         result = self.bridge.force_tool(tool_name, params)
         self.console_tabs.force_tool.show_result(str(result))
+
+    def _switch_project(self, folder: str):
+        """切换到新项目"""
+        new_root = Path(folder)
+
+        # 验证项目结构
+        if not self._validate_project(new_root):
+            self.statusbar.showMessage(f"警告: 所选文件夹可能不是有效的 Game Master Agent 项目")
+
+        self.project_root = new_root
+
+        # 切换工作目录
+        os.chdir(str(self.project_root))
+
+        # 重新初始化资源树
+        self.resource_tree.set_project_root(str(self.project_root))
+
+        # 重新初始化桥接层
+        self.bridge = AgentBridge(project_root=str(self.project_root))
+        self._setup_bridge_connections()
+        self._init_backend()
+
+        # 更新窗口标题
+        self.setWindowTitle(f"Game Master Agent WorkBench - {self.project_root.name}")
+
+        self.statusbar.showMessage(f"已切换到项目: {self.project_root}")
+
+    def _validate_project(self, root: Path) -> bool:
+        """验证项目结构"""
+        # 检查基本目录结构
+        required_dirs = ["workspace", "prompts", "skills"]
+        has_structure = all((root / d).exists() for d in required_dirs)
+
+        # 检查是否有 src 目录（后端代码）
+        has_src = (root / "src").exists()
+
+        return has_structure or has_src
