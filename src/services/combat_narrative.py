@@ -21,7 +21,7 @@ COMBAT_NARRATIVE_PROMPT = """你是一个RPG游戏叙事生成器。请将以下
 直接输出叙事文本，不要解释。"""
 
 
-def generate_combat_narrative(results: list[CombatResult], llm: LLMClient | None = None) -> str:
+async def generate_combat_narrative(results: list[CombatResult], llm: LLMClient | None = None) -> str:
     """生成战斗叙事
 
     Args:
@@ -48,7 +48,7 @@ def generate_combat_narrative(results: list[CombatResult], llm: LLMClient | None
     llm = llm or LLMClient()
     prompt = COMBAT_NARRATIVE_PROMPT.format(combat_data=combat_data)
 
-    narrative = llm.chat([
+    narrative = await llm.chat([
         {"role": "system", "content": "你是一个专业的RPG战斗叙事生成器。"},
         {"role": "user", "content": prompt},
     ])

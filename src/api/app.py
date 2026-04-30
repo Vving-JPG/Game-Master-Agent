@@ -35,13 +35,9 @@ app.add_exception_handler(GameError, game_error_handler)
 # 注册路由
 from src.api.routes.worlds import router as worlds_router
 from src.api.routes.player import router as player_router
-from src.api.routes.action import router as action_router
-from src.api.routes.ws import router as ws_router
 
 app.include_router(worlds_router)
 app.include_router(player_router)
-app.include_router(action_router)
-app.include_router(ws_router)
 
 # 管理端路由
 from src.api.routes.admin_prompts import router as admin_prompts_router
@@ -56,10 +52,102 @@ app.include_router(admin_data_router)
 app.include_router(admin_logs_router)
 app.include_router(admin_control_router)
 
+# === V2 路由注册 ===
+from src.api.routes.workspace import router as workspace_router, set_workspace_path
+from src.api.routes.skills import router as skills_router, set_skills_path
+from src.api.routes.agent import router as agent_router, set_agent_refs
+from src.api.sse import router as sse_router, set_sse_refs
+
+# 设置路径
+set_workspace_path("./workspace")
+set_skills_path("./skills")
+
+# 注册路由
+app.include_router(workspace_router)
+app.include_router(skills_router)
+app.include_router(agent_router)
+app.include_router(sse_router)
+
+# === V2 Agent 初始化 ===
+def init_v2_agent():
+    """初始化 V2 Agent 组件"""
+    try:
+        from src.agent.game_master import GameMaster
+        from src.agent.event_handler import EventHandler
+        from src.adapters.base import EngineAdapter, EngineEvent, CommandResult, ConnectionStatus
+        from src.services.llm_client import LLMClient
+        from src.memory.manager import MemoryManager
+        from src.skills.loader import SkillLoader
+
+        # Mock 适配器（用于前端开发测试）
+        class MockAdapter(EngineAdapter):
+            @property
+            def name(self) -> str:
+                return "mock"
+
+            @property
+            def connection_status(self) -> ConnectionStatus:
+                return ConnectionStatus.CONNECTED
+
+            async def connect(self, **kwargs) -> None:
+                pass
+
+            async def disconnect(self) -> None:
+                pass
+
+            async def send_commands(self, commands: list[dict]) -> list[CommandResult]:
+                return [CommandResult(intent=cmd.get("intent", "no_op"), status="success") for cmd in commands]
+
+            async def subscribe_events(self, event_types: list[str], callback) -> None:
+                pass
+
+            async def query_state(self, query: dict) -> dict:
+                return {"status": "ok"}
+
+        # 初始化适配器
+        engine_adapter = MockAdapter()
+
+        # 初始化 LLMClient
+        llm_client = LLMClient()
+
+        # 初始化 MemoryManager
+        memory_manager = MemoryManager(workspace_path="./workspace")
+
+        # 初始化 SkillLoader
+        skill_loader = SkillLoader(skills_path="./skills")
+
+        # 初始化 GameMaster
+        game_master = GameMaster(
+            llm_client=llm_client,
+            memory_manager=memory_manager,
+            skill_loader=skill_loader,
+            engine_adapter=engine_adapter,
+            system_prompt_path="./prompts/system_prompt.md"
+        )
+
+        # 初始化 EventHandler
+        event_handler = EventHandler(game_master, engine_adapter)
+
+        # 注入引用
+        set_agent_refs(event_handler, game_master, engine_adapter)
+        set_sse_refs(event_handler)
+
+        print("[OK] V2 Agent initialized successfully")
+        return True
+    except Exception as e:
+        print(f"[WARN] V2 Agent initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# 启动时初始化
+init_v2_agent()
+
 
 @app.get("/")
 def root():
-    return RedirectResponse(url="/static/index.html")
+    # V2: 重定向到 API 文档，静态前端已迁移到 workbench/
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health")
@@ -67,15 +155,15 @@ def health():
     return {"status": "ok"}
 
 
-# 静态文件服务（放在所有路由之后）
-web_dir = Path(__file__).parent.parent / "web"
-if web_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+# V1 静态文件服务已移除，使用 workbench/ 作为前端
+# web_dir = Path(__file__).parent.parent / "web"
+# if web_dir.exists():
+#     app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
 
-# 管理端静态文件（如果存在）
-admin_dist = Path(__file__).parent.parent / "admin" / "dist"
-if admin_dist.exists():
-    app.mount("/admin", StaticFiles(directory=str(admin_dist), html=True), name="admin")
+# V1 管理端已移除，使用 workbench/ 作为管理端
+# admin_dist = Path(__file__).parent.parent / "admin" / "dist"
+# if admin_dist.exists():
+#     app.mount("/admin", StaticFiles(directory=str(admin_dist), html=True), name="admin")
 
 
 def run_server():

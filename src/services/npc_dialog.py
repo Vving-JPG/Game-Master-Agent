@@ -2,10 +2,20 @@
 import json
 from src.services.llm_client import LLMClient
 from src.models import npc_repo, log_repo
-from src.tools import world_tool
+# V1 tool 系统已删除（V2 改用 Skills）
+# from src.tools import world_tool
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# V2: 活跃玩家 ID 由调用方设置
+_active_player_id: int | None = None
+
+
+def set_active_player(pid: int):
+    """设置当前活跃玩家ID"""
+    global _active_player_id
+    _active_player_id = pid
 
 # 对话用的System Prompt模板
 DIALOG_SYSTEM_PROMPT = """你是一个RPG游戏中的NPC。请根据以下人设信息，用中文回复玩家。
@@ -50,7 +60,7 @@ def build_npc_context(npc_id: int, db_path: str | None = None) -> dict:
     goals_desc = "，".join(g["description"] for g in goals) or "无特定目标"
 
     # 与玩家的关系
-    pid = world_tool._active_player_id
+    pid = _active_player_id
     rel_value = relationships.get(str(pid), 0)
     if rel_value > 50:
         relationship_desc = f"友好（{rel_value}）"
@@ -72,7 +82,7 @@ def build_npc_context(npc_id: int, db_path: str | None = None) -> dict:
     }
 
 
-def generate_npc_dialog(npc_id: int, player_message: str,
+async def generate_npc_dialog(npc_id: int, player_message: str,
                         llm: LLMClient | None = None, db_path: str | None = None) -> str:
     """生成NPC对话回复
 
@@ -92,7 +102,7 @@ def generate_npc_dialog(npc_id: int, player_message: str,
     system_prompt = DIALOG_SYSTEM_PROMPT.format(**ctx)
 
     llm = llm or LLMClient()
-    reply = llm.chat([
+    reply = await llm.chat([
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": player_message},
     ])

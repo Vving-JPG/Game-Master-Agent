@@ -10,10 +10,11 @@ logger = get_logger(__name__)
 
 
 def show_status(gm: GameMaster):
-    """显示当前状态"""
-    from src.tools import player_tool
+    """显示当前状态（V2: 玩家信息查询改用 API）"""
+    # from src.tools import player_tool
     print("\n" + "=" * 40)
-    print(player_tool.get_player_info(gm.db_path))
+    # print(player_tool.get_player_info(gm.db_path))
+    print("（玩家状态功能已迁移到 V2 API）")
     print("=" * 40)
 
 

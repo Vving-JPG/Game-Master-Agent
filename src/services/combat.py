@@ -1,11 +1,22 @@
 """战斗系统 - D&D 5e 简化版"""
 import random
+import re
 from dataclasses import dataclass
 from typing import Optional
-from src.tools.dice import roll_dice
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _roll_dice(expression: str) -> dict:
+    """简易骰子表达式解析器"""
+    match = re.match(r'^(\d*)d(\d+)$', expression)
+    if not match:
+        return {"expression": expression, "total": 0}
+    count = int(match.group(1)) if match.group(1) else 1
+    sides = int(match.group(2))
+    rolls = [random.randint(1, sides) for _ in range(count)]
+    return {"expression": expression, "rolls": rolls, "total": sum(rolls)}
 
 
 @dataclass
@@ -55,7 +66,7 @@ def attack(attacker: Combatant, defender: Combatant) -> CombatResult:
     4. 伤害: 武器骰 + 加值
     """
     # 攻击检定
-    roll_result = roll_dice("1d20")
+    roll_result = _roll_dice("1d20")
     attack_roll = roll_result["total"]
     total_attack = attack_roll + attacker.attack_bonus
 
@@ -66,7 +77,7 @@ def attack(attacker: Combatant, defender: Combatant) -> CombatResult:
     damage = 0
     if hit or critical:
         # 伤害骰
-        damage_result = roll_dice(attacker.damage_dice)
+        damage_result = _roll_dice(attacker.damage_dice)
         damage = damage_result["total"]
         if critical:
             # 暴击：双倍伤害骰

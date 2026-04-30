@@ -1,4 +1,5 @@
-"""LLMClient 测试"""
+"""LLMClient 测试（V2: 异步）"""
+import pytest
 from src.services.llm_client import LLMClient
 
 
@@ -9,10 +10,11 @@ def test_llm_client_init():
     assert client.total_prompt_tokens == 0
 
 
-def test_llm_client_chat():
+@pytest.mark.asyncio
+async def test_llm_client_chat():
     """测试基础对话"""
     client = LLMClient()
-    response = client.chat([{"role": "user", "content": "说一个字：好"}])
+    response = await client.chat([{"role": "user", "content": "说一个字：好"}])
     assert response is not None
     assert len(response) > 0
     assert client.total_prompt_tokens > 0
@@ -20,7 +22,8 @@ def test_llm_client_chat():
     print(f"Token统计: {client.get_usage_stats()}")
 
 
-def test_llm_client_tool_calling():
+@pytest.mark.asyncio
+async def test_llm_client_tool_calling():
     """测试工具调用"""
     client = LLMClient()
     tools = [
@@ -37,7 +40,7 @@ def test_llm_client_tool_calling():
             },
         }
     ]
-    response = client.chat_with_tools(
+    response = await client.chat_with_tools(
         messages=[{"role": "user", "content": "帮我掷一个20面骰子"}],
         tools=tools,
     )

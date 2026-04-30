@@ -19,7 +19,7 @@ async def pregenerate_location_description(location_name: str, location_type: st
 
     prompt = f"为一个奇幻RPG游戏生成'{location_name}'的详细场景描述（{location_type}）。2-3句话，包含视觉、听觉、嗅觉。只输出描述。"
     llm = LLMClient()
-    description = llm.chat([
+    description = await llm.chat([
         {"role": "system", "content": "你是RPG场景描述生成器。"},
         {"role": "user", "content": prompt},
     ])
@@ -37,7 +37,7 @@ async def pregenerate_npc_greeting(npc_name: str, personality: str = "友好") -
 
     prompt = f"生成NPC'{npc_name}'（性格：{personality}）的首次见面打招呼语。1-2句话。只输出对话。"
     llm = LLMClient()
-    greeting = llm.chat([
+    greeting = await llm.chat([
         {"role": "system", "content": "你是RPG NPC 对话生成器。"},
         {"role": "user", "content": prompt},
     ])
