@@ -1,2 +1,4 @@
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
 [pip]
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"

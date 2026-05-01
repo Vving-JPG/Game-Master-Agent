@@ -1,14 +1,19 @@
-# Game Master Agent V2
+# Game Master Agent V2 - GUI Edition
 
-通用游戏驱动 Agent 服务 — 像 Trae 驱动代码一样驱动游戏。
+通用游戏驱动 Agent — 像 Trae 驱动代码一样驱动游戏。
 
 ## 架构
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  游戏引擎    │────▶│  Agent 服务   │────▶│  WorkBench   │
-│ (TextAdapter)│◀────│ (GameMaster) │     │ (Vue 前端)   │
-└─────────────┘     └──────┬───────┘     └─────────────┘
+┌─────────────┐     ┌──────────────┐
+│  游戏引擎    │────▶│  Agent 核心   │
+│ (TextAdapter)│◀────│ (GameMaster) │
+└─────────────┘     └──────┬───────┘
+                           │
+                    ┌──────┴───────┐
+                    │  WorkBench   │
+                    │  (PyQt6 GUI) │
+                    └──────────────┘
                            │
                     ┌──────┴───────┐
                     │  DeepSeek    │
@@ -23,11 +28,12 @@
 | GameMaster | `src/agent/game_master.py` | 事件驱动主循环 |
 | CommandParser | `src/agent/command_parser.py` | 4 级容错 JSON 解析 |
 | PromptBuilder | `src/agent/prompt_builder.py` | Prompt 组装 |
-| EventHandler | `src/agent/event_handler.py` | 事件分发 + SSE |
+| EventHandler | `src/agent/event_handler.py` | 事件分发 |
 | MemoryManager | `src/memory/manager.py` | .md 记忆管理 |
 | SkillLoader | `src/skills/loader.py` | SKILL.md 发现与加载 |
 | TextAdapter | `src/adapters/text_adapter.py` | MUD 文字适配器 |
 | LLMClient | `src/services/llm_client.py` | DeepSeek API (AsyncOpenAI) |
+| WorkBench | `workbench/` | PyQt6 图形界面 |
 
 ### 记忆系统
 
@@ -59,33 +65,16 @@ DEEPSEEK_API_KEY=your_api_key_here
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 ```
 
-### 命令行模式 (MUD)
+### 启动 GUI
 
 ```bash
-uv run python src/cli_v2.py
+uv run python -m workbench
 ```
 
-### API 服务
-
+或直接运行：
 ```bash
-uvicorn src.api.app:app --reload --port 8000
+python -m workbench
 ```
-
-API 文档: http://localhost:8000/docs
-
-### WorkBench (管理端)
-
-```bash
-# 终端 1: 启动后端
-uvicorn src.api.app:app --reload --port 8000
-
-# 终端 2: 启动前端
-cd workbench
-npm install
-npm run dev
-```
-
-访问 http://localhost:5173
 
 ## 测试
 
@@ -98,14 +87,12 @@ uv run pytest tests/test_memory/ -v
 uv run pytest tests/test_skills/ -v
 uv run pytest tests/test_adapters/ -v
 uv run pytest tests/test_agent/ -v
-uv run pytest tests/test_api/ -v
-uv run pytest tests/test_integration/ -v
 ```
 
 ## 项目结构
 
 ```
-worldSim-master/
+Game-Master-Agent/
 ├── src/
 │   ├── agent/           # Agent 核心
 │   │   ├── game_master.py
@@ -121,32 +108,29 @@ worldSim-master/
 │   ├── adapters/        # 引擎适配层
 │   │   ├── base.py
 │   │   └── text_adapter.py
-│   ├── services/        # V1 服务（保留）
+│   ├── services/        # 服务层
 │   │   ├── llm_client.py
 │   │   ├── cache.py
 │   │   └── model_router.py
-│   ├── models/          # SQLite 数据模型
-│   └── api/             # FastAPI 路由
-│       ├── app.py
-│       ├── routes/
-│       │   ├── workspace.py
-│       │   ├── skills.py
-│       │   └── agent.py
-│       └── sse.py
+│   └── models/          # SQLite 数据模型
+├── workbench/           # PyQt6 GUI
+│   ├── app.py           # 应用入口
+│   ├── main_window.py   # 主窗口
+│   ├── bridge/          # 后端桥接层
+│   └── widgets/         # UI 组件
 ├── prompts/
 │   └── system_prompt.md
 ├── skills/
 │   └── builtin/         # 内置 SKILL.md
 ├── workspace/           # Agent 记忆文件
-├── workbench/           # Vue 前端
 ├── tests/               # 测试
 └── docs/                # 设计文档
 ```
 
 ## 技术栈
 
-- **后端**: Python 3.11+ / FastAPI / SQLite / DeepSeek API
-- **前端**: Vue 3 / TypeScript / Naive UI / Vite / md-editor-v3
+- **GUI**: PyQt6 / qasync
+- **后端**: Python 3.11+ / SQLite / DeepSeek API
 - **AI**: DeepSeek (OpenAI 兼容接口)
 - **记忆**: python-frontmatter (YAML + Markdown)
 
@@ -155,8 +139,7 @@ worldSim-master/
 - **事件驱动架构**: Agent 通过事件循环处理引擎输入
 - **渐进式记忆加载**: 3 层记忆披露（Index → Activation → Execution）
 - **Skill 系统**: 基于 SKILL.md 标准的可扩展技能
-- **WorkBench**: Vue3 管理端，支持文件浏览、MD 编辑、Agent 监控
-- **SSE 流式推送**: 实时事件流（token、command、turn_start/end）
+- **WorkBench**: PyQt6 管理端，支持文件浏览、MD 编辑、Agent 监控
 
 ## 许可证
 
