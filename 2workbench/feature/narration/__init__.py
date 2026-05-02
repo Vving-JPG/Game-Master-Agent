@@ -1,1 +1,4 @@
-"""叙事系统"""
+"""叙事增强系统"""
+from feature.narration.system import NarrationSystem
+
+__all__ = ["NarrationSystem"]

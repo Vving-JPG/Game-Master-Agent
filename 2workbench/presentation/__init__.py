@@ -1,6 +1,5 @@
-"""Presentation 层 — 门面展示
+"""Presentation 层 — UI 表现层"""
+from presentation.main_window import MainWindow
+from presentation.theme.manager import theme_manager
 
-本层包含 UI 系统（PyQt6）、特效系统、音效系统。
-本层可以依赖所有下层，但不包含计算逻辑。
-"""
-# P4/P5 阶段填充
+__all__ = ["MainWindow", "theme_manager"]

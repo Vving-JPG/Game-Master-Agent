@@ -1,0 +1,22 @@
+{
+  "name": "test_api_agent",
+  "description": "从零开始创建 Agent",
+  "version": "1.0.0",
+  "created_at": "2026-05-02T18:47:14.034237",
+  "updated_at": "2026-05-02T18:47:14.034237",
+  "template": "blank",
+  "graph_file": "graph.json",
+  "config_file": "config.json",
+  "default_model": "deepseek-chat",
+  "temperature": 0.7,
+  "max_tokens": 4096,
+  "stream_enabled": true,
+  "features": {
+    "battle": true,
+    "dialogue": true,
+    "quest": true,
+    "item": true,
+    "exploration": true,
+    "narration": true
+  }
+}

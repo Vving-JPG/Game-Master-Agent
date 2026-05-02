@@ -1,7 +1,20 @@
-"""Feature 层 — 业务功能集合
+"""Feature 层 — 业务功能集合"""
+from feature.base import BaseFeature
+from feature.registry import FeatureRegistry, feature_registry
+from feature.battle import BattleSystem
+from feature.dialogue import DialogueSystem
+from feature.quest import QuestSystem
+from feature.item import ItemSystem
+from feature.exploration import ExplorationSystem
+from feature.narration import NarrationSystem
 
-本层包含各业务系统（Battle/Item/Skill/Dialogue/Quest/AI 等）。
-本层只依赖 Core 和 Foundation 层，不依赖 Presentation 层。
-同层模块间仅通过 EventBus 通信，禁止直接依赖。
-"""
-# P3 阶段填充
+__all__ = [
+    "BaseFeature",
+    "FeatureRegistry", "feature_registry",
+    "BattleSystem",
+    "DialogueSystem",
+    "QuestSystem",
+    "ItemSystem",
+    "ExplorationSystem",
+    "NarrationSystem",
+]

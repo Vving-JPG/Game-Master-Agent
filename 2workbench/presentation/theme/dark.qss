@@ -1,0 +1,214 @@
+/* Dark Theme — VS Code Dark+ 风格 */
+
+/* 全局 */
+QWidget {
+    background-color: ${bg_primary};
+    color: ${text_primary};
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 13px;
+    selection-background-color: ${accent};
+    selection-color: ${text_bright};
+}
+
+/* 滚动条 */
+QScrollBar:vertical {
+    background: ${bg_primary};
+    width: 10px;
+    border: none;
+}
+QScrollBar::handle:vertical {
+    background: ${scrollbar};
+    min-height: 20px;
+    border-radius: 5px;
+}
+QScrollBar::handle:vertical:hover {
+    background: ${scrollbar_hover};
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background: ${bg_primary};
+    height: 10px;
+    border: none;
+}
+QScrollBar::handle:horizontal {
+    background: ${scrollbar};
+    min-width: 20px;
+    border-radius: 5px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: ${scrollbar_hover};
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+/* 主窗口 */
+QMainWindow {
+    background-color: ${bg_primary};
+}
+
+/* 菜单栏 */
+QMenuBar {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border-bottom: 1px solid ${border};
+    padding: 2px;
+}
+QMenuBar::item:selected {
+    background-color: ${bg_hover};
+}
+QMenu {
+    background-color: ${bg_secondary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    padding: 4px;
+}
+QMenu::item:selected {
+    background-color: ${accent};
+    color: ${text_bright};
+}
+
+/* 工具栏 */
+QToolBar {
+    background-color: ${bg_tertiary};
+    border-bottom: 1px solid ${border};
+    spacing: 4px;
+    padding: 2px;
+}
+
+/* 状态栏 */
+QStatusBar {
+    background-color: ${accent};
+    color: ${text_bright};
+    font-size: 12px;
+}
+
+/* 分割器 */
+QSplitter::handle {
+    background-color: ${border};
+}
+QSplitter::handle:horizontal {
+    width: 1px;
+}
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+/* 标签页 */
+QTabWidget::pane {
+    border: 1px solid ${border};
+    background-color: ${bg_primary};
+}
+QTabBar::tab {
+    background-color: ${bg_secondary};
+    color: ${text_secondary};
+    padding: 6px 16px;
+    border: 1px solid ${border};
+    border-bottom: none;
+    margin-right: 1px;
+}
+QTabBar::tab:selected {
+    background-color: ${bg_primary};
+    color: ${text_bright};
+    border-bottom: 2px solid ${accent};
+}
+
+/* 输入框 */
+QLineEdit, QTextEdit, QPlainTextEdit {
+    background-color: ${bg_primary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    border-radius: 3px;
+    padding: 4px 8px;
+    selection-background-color: ${accent};
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border-color: ${accent};
+}
+
+/* 按钮 */
+QPushButton {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    border-radius: 4px;
+    padding: 5px 16px;
+    min-height: 24px;
+}
+QPushButton:hover {
+    background-color: ${bg_hover};
+    border-color: ${accent};
+}
+QPushButton:pressed {
+    background-color: ${accent};
+    color: ${text_bright};
+}
+
+/* 列表/树 */
+QListView, QTreeView, QTreeWidget {
+    background-color: ${bg_primary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    alternate-background-color: ${bg_secondary};
+    show-decoration-selected: 1;
+}
+QListView::item:selected, QTreeView::item:selected {
+    background-color: ${bg_active};
+    color: ${text_bright};
+}
+QListView::item:hover, QTreeView::item:hover {
+    background-color: ${bg_hover};
+}
+
+/* 下拉框 */
+QComboBox {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    border-radius: 3px;
+    padding: 4px 8px;
+    min-height: 24px;
+}
+QComboBox:hover {
+    border-color: ${accent};
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox QAbstractItemView {
+    background-color: ${bg_secondary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    selection-background-color: ${accent};
+}
+
+/* 对话框 */
+QDialog {
+    background-color: ${bg_secondary};
+}
+
+/* 分组框 */
+QGroupBox {
+    border: 1px solid ${border};
+    border-radius: 4px;
+    margin-top: 8px;
+    padding-top: 16px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+}
+
+/* 工具提示 */
+QToolTip {
+    background-color: ${bg_tertiary};
+    color: ${text_primary};
+    border: 1px solid ${border};
+    padding: 4px;
+}

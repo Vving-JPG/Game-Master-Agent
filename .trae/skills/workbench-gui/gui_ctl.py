@@ -1,8 +1,71 @@
 #!/usr/bin/env python3
-"""
-WorkBench GUI 控制脚本
+"""Game Master Agent IDE — HTTP CLI 控制工具
+
+通过 HTTP API 控制 IDE 的各项功能。
+适配四层架构 (Foundation/Core/Feature/Presentation)。
 
 用法:
+    python gui_ctl.py [--port 18265] [--host 127.0.0.1]
+
+API 端点:
+    GET  /api/status                    — IDE 状态
+    GET  /api/state                     — 应用状态 (结构化 API)
+    GET  /api/dom                       — Widget DOM 树 (结构化 API)
+    GET  /api/dom?selector=console      — 特定区域 DOM
+    GET  /api/dom?diff=true             — DOM 变化
+    GET  /api/uia                       — Windows UIA 树
+    GET  /api/find?id=run_btn           — 查找 Widget
+    POST /api/project/create            — 创建项目
+    POST /api/project/open              — 打开项目
+    POST /api/project/close             — 关闭项目
+    GET  /api/project/info              — 项目信息
+    GET  /api/graph                     — 获取图定义
+    POST /api/graph/save                — 保存图定义
+    GET  /api/prompts                   — 列出 Prompt
+    GET  /api/prompts/<name>            — 获取 Prompt
+    POST /api/prompts/<name>            — 保存 Prompt
+    POST /api/agent/run                 — 运行 Agent
+    POST /api/agent/stop                — 停止 Agent
+    GET  /api/agent/state               — Agent 状态
+    GET  /api/features                  — Feature 列表
+    POST /api/features/<name>/enable    — 启用 Feature
+    POST /api/features/<name>/disable   — 禁用 Feature
+    GET  /api/tools                     — 工具列表
+    GET  /api/screenshot                — 截图
+
+四层架构操作:
+    # Foundation 层
+    python gui_ctl.py foundation status
+    
+    # Core 层
+    python gui_ctl.py core entities
+    
+    # Feature 层
+    python gui_ctl.py feature list
+    python gui_ctl.py feature enable battle
+    
+    # Presentation 层
+    python gui_ctl.py presentation theme dark
+
+结构化状态 API (推荐):
+    # 获取应用状态
+    python gui_ctl.py state
+    python gui_ctl.py state --json
+
+    # 获取 Widget DOM 树
+    python gui_ctl.py dom
+    python gui_ctl.py dom --selector console    # 只获取控制台区域
+    python gui_ctl.py dom --selector editor     # 只获取编辑器区域
+    python gui_ctl.py dom --diff                # 只显示变化
+
+    # 获取 Windows UIA 树
+    python gui_ctl.py uia
+
+    # 查找 Widget
+    python gui_ctl.py find --id run_button
+    python gui_ctl.py find --class QPushButton --text "运行"
+
+基本控制:
     # 截图
     python gui_ctl.py screenshot
 
@@ -33,6 +96,8 @@ WorkBench GUI 控制脚本
     python gui_ctl.py loop -n 10
 """
 
+from __future__ import annotations
+
 import argparse
 import base64
 import json
@@ -48,6 +113,211 @@ BASE_URL = "http://127.0.0.1:18080"
 # 截图保存目录
 SCREENSHOTS_DIR = Path("screenshots")
 SCREENSHOTS_DIR.mkdir(exist_ok=True)
+
+
+# ==================== 结构化状态 API 命令 ====================
+
+def cmd_state(args):
+    """获取应用状态 — 结构化状态 API"""
+    result = _request("GET", "/api/state")
+
+    if "error" in result:
+        print(f"[X] 获取状态失败: {result['error']}")
+        return 1
+
+    state = result.get("state", {})
+
+    # 项目状态
+    project = state.get("project", {})
+    print(f"📁 项目: {project.get('name', '未打开')} {'(已打开)' if project.get('open') else '(未打开)'}")
+
+    # Agent 状态
+    agent = state.get("agent", {})
+    print(f"🤖 Agent: {agent.get('status', 'unknown')} | 回合: {agent.get('turn', 0)} | 模型: {agent.get('model', 'unknown')}")
+
+    # Feature 状态
+    features = state.get("features", {})
+    enabled = [name for name, info in features.items() if info.get("enabled")]
+    print(f"⚡ Features ({len(enabled)} 启用): {', '.join(enabled[:5])}{'...' if len(enabled) > 5 else ''}")
+
+    # 编辑器状态
+    editor = state.get("editor", {})
+    if editor.get("active_tab"):
+        print(f"📝 编辑器: {editor.get('active_tab')} {'(已修改)' if editor.get('modified') else ''}")
+
+    # UI 状态
+    ui = state.get("ui", {})
+    print(f"🎨 主题: {ui.get('theme', 'unknown')} | 窗口: {ui.get('window', {}).get('size', {}).get('width', 0)}x{ui.get('window', {}).get('size', {}).get('height', 0)}")
+
+    if args.json:
+        print("\n完整 JSON:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    return 0
+
+
+def cmd_dom(args):
+    """获取 Widget DOM 树 — 结构化状态 API"""
+    params = []
+    if args.selector:
+        params.append(f"selector={args.selector}")
+    if args.diff:
+        params.append("diff=true")
+
+    path = "/api/dom"
+    if params:
+        path += "?" + "&".join(params)
+
+    result = _request("GET", path)
+
+    if "error" in result:
+        print(f"[X] 获取 DOM 失败: {result['error']}")
+        return 1
+
+    tree = result.get("tree", {})
+
+    if args.diff:
+        # 显示差异模式
+        print("DOM 变化:")
+        changed = tree.get("changed", [])
+        added = tree.get("added", [])
+        removed = tree.get("removed", [])
+
+        if changed:
+            print(f"  变化 ({len(changed)}):")
+            for c in changed[:10]:
+                print(f"    - {c.get('id') or 'unknown'}.{c.get('field')}: {c.get('old')} → {c.get('new')}")
+
+        if added:
+            print(f"  新增 ({len(added)}): {', '.join(added[:5])}{'...' if len(added) > 5 else ''}")
+
+        if removed:
+            print(f"  移除 ({len(removed)}): {', '.join(removed[:5])}{'...' if len(removed) > 5 else ''}")
+
+        if not changed and not added and not removed:
+            print("  (无变化)")
+    else:
+        # 显示树结构
+        print("Widget DOM 树:")
+        _print_widget_tree(tree, 0)
+
+    if args.json:
+        print("\n完整 JSON:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    return 0
+
+
+def _print_widget_tree(node: dict, depth: int, max_depth: int = 3):
+    """打印 Widget 树"""
+    if depth > max_depth:
+        return
+
+    indent = "  " * depth
+    class_name = node.get("class", "Unknown")
+    obj_id = node.get("id", "")
+    text = node.get("text", "")[:30]
+    visible = "👁" if node.get("visible") else "🚫"
+    enabled = "✓" if node.get("enabled") else "✗"
+
+    id_str = f"#{obj_id}" if obj_id else ""
+    text_str = f" \"{text}\"" if text else ""
+
+    print(f"{indent}{visible}{enabled} {class_name}{id_str}{text_str}")
+
+    for child in node.get("children", [])[:5]:  # 最多显示 5 个子节点
+        _print_widget_tree(child, depth + 1, max_depth)
+
+    children = node.get("children", [])
+    if len(children) > 5:
+        print(f"{indent}  ... 还有 {len(children) - 5} 个子节点")
+
+
+def cmd_uia(args):
+    """获取 Windows UIA 树 — 结构化状态 API"""
+    result = _request("GET", "/api/uia")
+
+    if "error" in result:
+        print(f"[X] 获取 UIA 树失败: {result['error']}")
+        return 1
+
+    if result.get("status") == "unavailable":
+        print(f"[X] {result.get('error', 'UIA 不可用')}")
+        print(f"[i] 提示: {result.get('hint', '')}")
+        return 1
+
+    tree = result.get("tree", {})
+    print("Windows UI Automation 树:")
+    _print_uia_tree(tree, 0)
+
+    if args.json:
+        print("\n完整 JSON:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    return 0
+
+
+def _print_uia_tree(node: dict, depth: int, max_depth: int = 3):
+    """打印 UIA 树"""
+    if depth > max_depth:
+        return
+
+    indent = "  " * depth
+    control_type = node.get("control_type", "Unknown")
+    name = node.get("name", "")[:30]
+    class_name = node.get("class_name", "")
+
+    name_str = f" \"{name}\"" if name else ""
+    class_str = f" ({class_name})" if class_name and args.json else ""
+
+    print(f"{indent}[{control_type}]{name_str}{class_str}")
+
+    for child in node.get("children", [])[:5]:
+        _print_uia_tree(child, depth + 1, max_depth)
+
+    children = node.get("children", [])
+    if len(children) > 5:
+        print(f"{indent}  ... 还有 {len(children) - 5} 个子节点")
+
+
+def cmd_find(args):
+    """查找 Widget — 结构化状态 API"""
+    query = {}
+    if args.id:
+        query["id"] = args.id
+    if args.class_name:
+        query["class"] = args.class_name
+    if args.text:
+        query["text"] = args.text
+
+    if not query:
+        print("[X] 请提供至少一个查询条件: --id, --class, --text")
+        return 1
+
+    # 构建查询字符串
+    query_str = "&".join([f"{k}={v}" for k, v in query.items()])
+    result = _request("GET", f"/api/find?{query_str}")
+
+    if "error" in result:
+        print(f"[X] 查找失败: {result['error']}")
+        return 1
+
+    count = result.get("count", 0)
+    results = result.get("results", [])
+
+    print(f"找到 {count} 个匹配项:")
+    for i, r in enumerate(results[:10], 1):
+        print(f"  {i}. {r.get('class')}#{r.get('id')} \"{r.get('text', '')[:30]}\"")
+        print(f"     位置: ({r.get('geometry', {}).get('x', 0)}, {r.get('geometry', {}).get('y', 0)})")
+
+    if count > 10:
+        print(f"  ... 还有 {count - 10} 个")
+
+    if args.json:
+        print("\n完整 JSON:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    return 0
 
 
 def _request(method: str, path: str, data: dict | None = None) -> dict:
@@ -72,7 +342,106 @@ def _request(method: str, path: str, data: dict | None = None) -> dict:
         except:
             return {"error": error_body, "status_code": e.code}
     except urllib.error.URLError as e:
-        return {"error": f"连接失败: {e.reason}", "hint": "请先启动 GUI: uv run python -m workbench"}
+        return {"error": f"连接失败: {e.reason}", "hint": "请先启动 GUI: cd 2workbench && python app.py"}
+
+
+# ==================== 四层架构操作 ====================
+
+def cmd_foundation(args):
+    """Foundation 层操作"""
+    if args.action == "status":
+        result = _request("GET", "/api/foundation/status")
+        print(f"EventBus: {result.get('event_bus', 'unknown')}")
+        print(f"Database: {result.get('database', 'unknown')}")
+        print(f"Cache: {result.get('cache', 'unknown')}")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.action == "config":
+        result = _request("GET", "/api/foundation/config")
+        print(f"Model: {result.get('model', 'unknown')}")
+        print(f"Base URL: {result.get('base_url', 'unknown')}")
+    else:
+        print(f"[X] 未知操作: {args.action}")
+        return 1
+    return 0
+
+
+def cmd_core(args):
+    """Core 层操作"""
+    if args.action == "entities":
+        result = _request("GET", "/api/core/entities")
+        entities = result.get("entities", [])
+        print(f"实体类型 ({len(entities)}):")
+        for e in entities:
+            print(f"  - {e}")
+    elif args.action == "repositories":
+        result = _request("GET", "/api/core/repositories")
+        repos = result.get("repositories", [])
+        print(f"Repository ({len(repos)}):")
+        for r in repos:
+            print(f"  - {r}")
+    elif args.action == "calculators":
+        result = _request("GET", "/api/core/calculators")
+        calc = result.get("calculators", [])
+        print(f"计算器 ({len(calc)}):")
+        for c in calc:
+            print(f"  - {c}")
+    else:
+        print(f"[X] 未知操作: {args.action}")
+        return 1
+    return 0
+
+
+def cmd_feature(args):
+    """Feature 层操作"""
+    if args.action == "list":
+        result = _request("GET", "/api/features")
+        features = result.get("features", [])
+        print(f"Feature 列表 ({len(features)}):")
+        for f in features:
+            status = "✅" if f.get("enabled") else "⬜"
+            print(f"  {status} {f.get('name', '?')}: {f.get('description', '')}")
+    elif args.action == "enable":
+        result = _request("POST", f"/api/features/{args.name}/enable")
+        print(f"[OK] {result.get('message', f'已启用 {args.name}')}")
+    elif args.action == "disable":
+        result = _request("POST", f"/api/features/{args.name}/disable")
+        print(f"[OK] {result.get('message', f'已禁用 {args.name}')}")
+    elif args.action == "state":
+        result = _request("GET", f"/api/features/{args.name}/state")
+        print(f"状态: {result.get('state', {})}")
+    else:
+        print(f"[X] 未知操作: {args.action}")
+        return 1
+    return 0
+
+
+def cmd_presentation(args):
+    """Presentation 层操作"""
+    if args.action == "theme":
+        if args.value:
+            result = _request("POST", "/api/presentation/theme", {"theme": args.value})
+            print(f"[OK] 主题已切换为: {args.value}")
+        else:
+            result = _request("GET", "/api/presentation/theme")
+            print(f"当前主题: {result.get('theme', 'unknown')}")
+    elif args.action == "project":
+        if args.value == "create":
+            result = _request("POST", "/api/project/create", {"name": args.extra, "template": "trpg"})
+            print(f"[OK] 项目已创建: {result.get('path', '')}")
+        elif args.value == "open":
+            result = _request("POST", "/api/project/open", {"path": args.extra})
+            print(f"[OK] 项目已打开: {result.get('name', '')}")
+        elif args.value == "close":
+            result = _request("POST", "/api/project/close")
+            print(f"[OK] 项目已关闭")
+        else:
+            result = _request("GET", "/api/project/info")
+            print(f"项目: {result.get('name', '未打开')}")
+    else:
+        print(f"[X] 未知操作: {args.action}")
+        return 1
+    return 0
 
 
 # ==================== 截图功能 ====================
@@ -346,9 +715,26 @@ def cmd_loop(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="WorkBench GUI 控制脚本")
+    parser = argparse.ArgumentParser(description="Game Master Agent IDE — HTTP CLI 控制工具")
     parser.add_argument("--json", "-j", action="store_true", help="JSON 输出")
+    parser.add_argument("--port", "-p", type=int, default=18080, help="HTTP 端口")
     sub = parser.add_subparsers(dest="command")
+
+    # 四层架构操作
+    p = sub.add_parser("foundation", help="Foundation 层操作")
+    p.add_argument("action", choices=["status", "config"])
+
+    p = sub.add_parser("core", help="Core 层操作")
+    p.add_argument("action", choices=["entities", "repositories", "calculators"])
+
+    p = sub.add_parser("feature", help="Feature 层操作")
+    p.add_argument("action", choices=["list", "enable", "disable", "state"])
+    p.add_argument("name", nargs="?", help="Feature 名称")
+
+    p = sub.add_parser("presentation", help="Presentation 层操作")
+    p.add_argument("action", choices=["theme", "project"])
+    p.add_argument("value", nargs="?", help="值")
+    p.add_argument("extra", nargs="?", help="额外参数")
 
     # 截图
     sub.add_parser("screenshot", help="截图 GUI")
@@ -411,12 +797,35 @@ def main():
     p.add_argument("-s", "--single", action="store_true", help="只执行一轮")
     p.add_argument("--auto-fix", action="store_true", help="自动修复模式")
 
+    # 结构化状态 API 命令
+    p = sub.add_parser("state", help="获取应用状态 (结构化 API)")
+
+    p = sub.add_parser("dom", help="获取 Widget DOM 树 (结构化 API)")
+    p.add_argument("--selector", "-s", help="CSS-like 选择器 (如: console, editor, #run_btn)")
+    p.add_argument("--diff", "-d", action="store_true", help="只显示变化部分")
+
+    p = sub.add_parser("uia", help="获取 Windows UIA 树 (结构化 API)")
+
+    p = sub.add_parser("find", help="查找 Widget (结构化 API)")
+    p.add_argument("--id", "-i", help="按 objectName 查找")
+    p.add_argument("--class", "-c", dest="class_name", help="按类名查找")
+    p.add_argument("--text", "-t", help="按文本查找")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
         sys.exit(1)
 
+    # 更新 BASE_URL 如果指定了端口
+    global BASE_URL
+    if args.port != 18080:
+        BASE_URL = f"http://127.0.0.1:{args.port}"
+
     commands = {
+        "foundation": cmd_foundation,
+        "core": cmd_core,
+        "feature": cmd_feature,
+        "presentation": cmd_presentation,
         "screenshot": cmd_screenshot,
         "status": cmd_status,
         "run": cmd_run,
@@ -434,6 +843,10 @@ def main():
         "delete": cmd_delete,
         "click": cmd_click,
         "loop": cmd_loop,
+        "state": cmd_state,
+        "dom": cmd_dom,
+        "uia": cmd_uia,
+        "find": cmd_find,
     }
 
     handler = commands.get(args.command)

@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 _thread_local = threading.local()
 
 # 当前数据库 schema 版本
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def get_db_path() -> Path:
@@ -134,7 +134,11 @@ def init_db(
             row = db.execute("PRAGMA user_version").fetchone()
             current_version = row[0] if row else 0
 
-            if current_version >= SCHEMA_VERSION:
+            # 检查 worlds 表是否存在（判断是否需要初始化）
+            table_check = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='worlds'").fetchone()
+            needs_init = table_check is None or current_version < SCHEMA_VERSION
+
+            if not needs_init:
                 logger.info(f"数据库已是最新版本 (v{current_version})")
                 return True
 
