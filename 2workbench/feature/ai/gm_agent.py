@@ -23,6 +23,11 @@ from foundation.logger import get_logger
 from core.state import AgentState, create_initial_state
 from core.models import WorldRepo, PlayerRepo, NPCRepo, LocationRepo, MemoryRepo
 
+# Repository 实例复用（无状态，可安全共享）
+_world_repo = WorldRepo()
+_player_repo = PlayerRepo()
+_npc_repo = NPCRepo()
+
 from .graph import gm_graph
 from .events import (
     create_turn_start_event, create_turn_end_event, create_error_event,
@@ -60,18 +65,15 @@ class GMAgent:
         state = create_initial_state(world_id=str(self._world_id))
 
         try:
-            world_repo = WorldRepo()
-            world = world_repo.get_by_id(self._world_id, self._db_path)
+            world = _world_repo.get_by_id(self._world_id, self._db_path)
             if world:
                 state["current_location"] = {"name": world.name}
 
-            player_repo = PlayerRepo()
-            player = player_repo.get_by_world(self._world_id, self._db_path)
+            player = _player_repo.get_by_world(self._world_id, self._db_path)
             if player:
                 state["player"] = player.model_dump()
 
-            npc_repo = NPCRepo()
-            npcs = npc_repo.get_by_world(self._world_id, self._db_path)
+            npcs = _npc_repo.get_by_world(self._world_id, self._db_path)
             if npcs:
                 state["active_npcs"] = [n.model_dump() for n in npcs]
 
