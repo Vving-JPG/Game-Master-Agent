@@ -27,7 +27,7 @@ from PyQt6.QtCore import (
     Qt, QPointF, QRectF, QLineF, pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QPainter, QPen, QBrush, QColor, QFont,
+    QPainter, QPen, QBrush, QColor, QFont, QFontDatabase,
     QPainterPath, QPolygonF, QWheelEvent,
 )
 
@@ -89,7 +89,7 @@ class GraphNodeItem(QGraphicsRectItem):
         # 标签文本
         self._label_item = QGraphicsTextItem(self.label, self)
         self._label_item.setDefaultTextColor(QColor("#ffffff"))
-        font = QFont("Microsoft YaHei", 10, QFont.Weight.Bold)
+        font = QFont("Microsoft YaHei", 10, QFont.Weight.Bold) if "Microsoft YaHei" in QFontDatabase.families() else QFont("Segoe UI", 10, QFont.Weight.Bold)
         self._label_item.setFont(font)
         # 居中
         text_rect = self._label_item.boundingRect()
@@ -101,7 +101,7 @@ class GraphNodeItem(QGraphicsRectItem):
         # 类型标签
         self._type_item = QGraphicsTextItem(type_label, self)
         self._type_item.setDefaultTextColor(QColor("#cccccc"))
-        type_font = QFont("Microsoft YaHei", 8)
+        type_font = QFont("Microsoft YaHei", 8) if "Microsoft YaHei" in QFontDatabase.families() else QFont("Segoe UI", 8)
         self._type_item.setFont(type_font)
         type_rect = self._type_item.boundingRect()
         self._type_item.setPos(
@@ -272,7 +272,7 @@ class GraphEdgeItem(QGraphicsPathItem):
             mid = path.pointAtPercent(0.5)
             label = QGraphicsTextItem(self.condition, self)
             label.setDefaultTextColor(QColor("#f44747"))
-            label.setFont(QFont("Microsoft YaHei", 8))
+            label.setFont(QFont("Microsoft YaHei", 8) if "Microsoft YaHei" in QFontDatabase.families() else QFont("Segoe UI", 8))
             label.setPos(mid.x() - 30, mid.y() - 15)
 
     def to_dict(self) -> dict:

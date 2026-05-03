@@ -16,6 +16,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from foundation.logger import get_logger
+
+logger = get_logger("app")
+
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = Path(__file__).parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -72,7 +76,7 @@ def main() -> None:
         if project_path.exists():
             selected_project = project_path
         else:
-            print(f"错误: 项目路径不存在: {args.project}")
+            logger.error(f"项目路径不存在: {args.project}")
             return
     elif args.skip_selector:
         # 跳过项目选择器，直接创建空项目
@@ -123,6 +127,7 @@ def main() -> None:
                 project_data = dialog.get_project_data()
                 name = project_data["name"]
                 template = project_data["template"]
+                project_dir = project_data.get("directory")
 
                 if not name:
                     from PyQt6.QtWidgets import QMessageBox
@@ -133,8 +138,11 @@ def main() -> None:
                     continue
 
                 try:
-                    # 指定在 data 目录下创建项目
-                    data_dir = PROJECT_ROOT / "data"
+                    # 使用用户选择的路径，或使用默认路径
+                    if project_dir:
+                        data_dir = Path(project_dir)
+                    else:
+                        data_dir = PROJECT_ROOT / "data"
                     data_dir.mkdir(exist_ok=True)
                     selected_project = project_manager.create_project(name, template, directory=str(data_dir))
                     # 创建成功，跳出循环

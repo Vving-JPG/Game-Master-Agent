@@ -17,6 +17,7 @@ Trae 通过 curl 操控 GUI:
 from __future__ import annotations
 
 import json
+import secrets
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -33,6 +34,14 @@ logger = get_logger(__name__)
 
 # 默认端口
 DEFAULT_PORT = 18080
+
+# 认证 Token（启动时生成）
+_AUTH_TOKEN = secrets.token_hex(32)
+
+
+def get_auth_token() -> str:
+    """获取认证 Token"""
+    return _AUTH_TOKEN
 
 
 class GuiHTTPHandler(BaseHTTPRequestHandler):
@@ -58,6 +67,15 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         """静默日志 (不打印到控制台)"""
         pass
+
+    def _check_auth(self) -> bool:
+        """检查请求中的认证 token"""
+        auth = self.headers.get("X-Auth-Token", "")
+        return auth == _AUTH_TOKEN
+
+    def _send_unauthorized(self):
+        """发送 401 未授权响应"""
+        self._send_json({"error": "Unauthorized", "message": "Missing or invalid X-Auth-Token header"}, 401)
 
     def _send_json(self, data: Any, status: int = 200):
         """发送 JSON 响应"""
@@ -98,11 +116,18 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
-        try:
-            if path == "/health":
-                self._send_json({"status": "ok", "version": "2.0"})
+        # 健康检查端点不需要认证
+        if path == "/health":
+            self._send_json({"status": "ok", "version": "2.0"})
+            return
 
-            elif path == "/api/status":
+        # 其他端点需要认证
+        if not self._check_auth():
+            self._send_unauthorized()
+            return
+
+        try:
+            if path == "/api/status":
                 self._handle_get_status()
 
             elif path == "/api/state":
@@ -135,6 +160,11 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        # 所有 POST 端点需要认证
+        if not self._check_auth():
+            self._send_unauthorized()
+            return
 
         try:
             if path == "/api/run":
@@ -271,7 +301,10 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             logger.error(traceback.format_exc())
 
     def _handle_get_screenshot(self):
-        """截图 GUI 界面 — 使用 Windows API 支持后台窗口截图
+        """截图 GUI 界面 — 跨平台支持
+        
+        Windows: 使用 Windows API 支持后台窗口截图
+        Linux/macOS: 使用 Qt 方法截图
         
         流程:
         1. 将窗口带到前台
@@ -287,6 +320,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
         try:
             import base64
             import io
+            import sys
             import time
             from PIL import Image
             
@@ -296,8 +330,11 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             # 2. 等待窗口渲染完成
             time.sleep(0.3)
             
-            # 3. 截图
-            screenshot_bytes = self._capture_window_winapi(gui)
+            # 3. 根据平台选择截图方法
+            if sys.platform == "win32":
+                screenshot_bytes = self._capture_window_winapi(gui)
+            else:
+                screenshot_bytes = self._capture_with_qt_bytes(gui)
             
             # 4. 如果窗口之前是最小化的，或者需要自动最小化，则最小化
             self._minimize_window(gui)
@@ -318,8 +355,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
                     "height": height
                 })
             else:
-                # 如果 Windows API 失败，回退到 Qt 方法
-                self._capture_with_qt(gui)
+                self._send_json({"error": "截图失败"}, 500)
                 
         except Exception as e:
             self._send_json({"error": f"截图失败: {str(e)}"}, 500)
@@ -542,32 +578,30 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             logger.error(traceback.format_exc())
             return None
     
-    def _capture_with_qt(self, gui) -> None:
-        """使用 Qt 方法截图（回退方案）"""
-        from PyQt6.QtCore import QBuffer, QByteArray
-        from PyQt6.QtGui import QPixmap
-        import base64
+    def _capture_with_qt_bytes(self, gui) -> bytes | None:
+        """使用 Qt 方法截图（跨平台方案）
         
-        # 截取整个窗口
-        pixmap = gui.grab()
-        
-        # 转换为 PNG 字节
-        byte_array = QByteArray()
-        buffer = QBuffer(byte_array)
-        buffer.open(QBuffer.OpenModeFlag.WriteOnly)
-        pixmap.save(buffer, "PNG")
-        buffer.close()
-        
-        # Base64 编码
-        img_base64 = base64.b64encode(byte_array.data()).decode('utf-8')
-        
-        self._send_json({
-            "status": "ok",
-            "format": "png",
-            "base64": img_base64,
-            "width": pixmap.width(),
-            "height": pixmap.height()
-        })
+        Returns:
+            PNG 格式的图片字节，失败返回 None
+        """
+        try:
+            from PyQt6.QtCore import QBuffer, QByteArray
+            from PyQt6.QtGui import QPixmap
+            
+            # 截取整个窗口
+            pixmap = gui.grab()
+            
+            # 转换为 PNG 字节
+            byte_array = QByteArray()
+            buffer = QBuffer(byte_array)
+            buffer.open(QBuffer.OpenModeFlag.WriteOnly)
+            pixmap.save(buffer, "PNG")
+            buffer.close()
+            
+            return bytes(byte_array.data())
+        except Exception as e:
+            logger.error(f"[Screenshot] Qt 截图失败: {e}")
+            return None
 
     def _handle_click_widget(self, widget: str):
         """模拟点击界面元素"""
@@ -626,5 +660,9 @@ def start_server(gui_instance, port: int = DEFAULT_PORT):
 
     thread = threading.Thread(target=_run, daemon=True, name="http-server")
     thread.start()
+
+    # 打印认证 Token
+    logger.info(f"HTTP Server started on http://127.0.0.1:{port}")
+    logger.info(f"Auth Token: {_AUTH_TOKEN}")
 
     return server, thread

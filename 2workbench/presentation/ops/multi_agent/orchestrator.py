@@ -71,6 +71,18 @@ class MultiAgentOrchestrator(BaseWidget):
         self._btn_add_link.clicked.connect(self._add_link)
         toolbar.addWidget(self._btn_add_link)
 
+        self._btn_delete_agent = StyledButton("🗑️ 删除 Agent", style_type="danger")
+        self._btn_delete_agent.clicked.connect(self._delete_agent)
+        toolbar.addWidget(self._btn_delete_agent)
+
+        self._btn_delete_link = StyledButton("🗑️ 删除连接", style_type="danger")
+        self._btn_delete_link.clicked.connect(self._delete_link)
+        toolbar.addWidget(self._btn_delete_link)
+
+        self._btn_validate = StyledButton("✓ 验证链", style_type="secondary")
+        self._btn_validate.clicked.connect(self._on_validate)
+        toolbar.addWidget(self._btn_validate)
+
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
@@ -195,6 +207,91 @@ class MultiAgentOrchestrator(BaseWidget):
         self._chain_list.clear()
         for step in self._chain:
             self._chain_list.addItem(f"{step.agent_id} → {step.next_agent_id} [{step.step_type}]")
+
+    def _delete_agent(self) -> None:
+        """删除选中的 Agent"""
+        from PyQt6.QtWidgets import QMessageBox
+        current = self._agent_list.currentRow()
+        if current < 0:
+            QMessageBox.warning(self, "提示", "请先选择一个 Agent")
+            return
+        agent = self._agents[current]
+        reply = QMessageBox.question(
+            self, "确认删除", f"确定删除 Agent '{agent.name}' 吗？\n相关连接也将被删除。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            agent_id = agent.id
+            self._agents.pop(current)
+            # 删除相关连接
+            self._chain = [s for s in self._chain if s.agent_id != agent_id and s.next_agent_id != agent_id]
+            self._refresh_agent_list()
+            self._refresh_chain_list()
+
+    def _delete_link(self) -> None:
+        """删除选中的连接"""
+        from PyQt6.QtWidgets import QMessageBox
+        current = self._chain_list.currentRow()
+        if current < 0:
+            QMessageBox.warning(self, "提示", "请先选择一个连接")
+            return
+        self._chain.pop(current)
+        self._refresh_chain_list()
+
+    def _validate_chain(self) -> list[str]:
+        """验证链的完整性，返回错误列表"""
+        errors = []
+        agent_ids = {a.id for a in self._agents}
+
+        # 检查孤立 Agent（没有连接的）
+        connected_ids = set()
+        for step in self._chain:
+            connected_ids.add(step.agent_id)
+            connected_ids.add(step.next_agent_id)
+        for agent in self._agents:
+            if agent.id not in connected_ids and len(self._agents) > 1:
+                errors.append(f"Agent '{agent.name}' 没有任何连接")
+
+        # 检查悬空连接
+        for step in self._chain:
+            if step.agent_id not in agent_ids:
+                errors.append(f"连接引用了不存在的 Agent: {step.agent_id}")
+            if step.next_agent_id not in agent_ids:
+                errors.append(f"连接引用了不存在的 Agent: {step.next_agent_id}")
+
+        # 检查循环依赖（简单 DFS）
+        graph = {a.id: [] for a in self._agents}
+        for step in self._chain:
+            if step.agent_id in graph:
+                graph[step.agent_id].append(step.next_agent_id)
+
+        visited = set()
+        def dfs(node, path):
+            if node in path:
+                cycle = path[path.index(node):] + [node]
+                errors.append(f"检测到循环: {' → '.join(cycle)}")
+                return
+            if node in visited:
+                return
+            path.append(node)
+            for next_id in graph.get(node, []):
+                dfs(next_id, path)
+            path.pop()
+            visited.add(node)
+
+        for agent_id in graph:
+            dfs(agent_id, [])
+
+        return errors
+
+    def _on_validate(self) -> None:
+        """验证按钮回调"""
+        from PyQt6.QtWidgets import QMessageBox
+        errors = self._validate_chain()
+        if errors:
+            QMessageBox.warning(self, "链验证失败", "\n".join(f"• {e}" for e in errors))
+        else:
+            QMessageBox.information(self, "链验证通过", "链结构有效，无错误。")
 
     def get_config(self) -> dict:
         """导出编排配置"""

@@ -68,6 +68,24 @@
 | `记忆/p4_main_window.md` | `presentation.main_window` | MainWindow 主窗口 | ✅ |
 | `记忆/p4_theme.md` | `presentation.theme` | Theme 主题管理 | ✅ |
 | `记忆/p4_project_manager.md` | `presentation.project.manager` | ProjectManager 项目管理 | ✅ |
+| `记忆/p4_project_selector.md` | `presentation.dialogs.project_selector` | ProjectSelector & NewProjectDialog | ✅ |
+
+#### 优化阶段（P1-P4）
+
+| 文件 | 阶段 | 说明 | 状态 |
+|------|------|------|------|
+| `记忆/opt_p1_bugfix.md` | **P1** | 回归 Bug 紧急修复 | ✅ |
+| `记忆/opt_p2_quality.md` | **P2** | 代码质量 + 样式清理 | ✅ |
+| `记忆/opt_p3_ops_features.md` | **P3** | Ops 面板功能补全 | ✅ |
+| `记忆/opt_p4_advanced.md` | **P4** | 进阶功能补全 | ✅ |
+
+#### Agent 运行流程优化（2026-05-03）
+
+| 文件 | 阶段 | 说明 | 状态 |
+|------|------|------|------|
+| `记忆/p1_agent_fix.md` | **P1** | 打通 Agent 运行流程 | ✅ |
+| `记忆/p2_editor_fix.md` | **P2** | 编辑器体验修复 | ✅ |
+| `记忆/p3_tool_feature_fix.md` | **P3** | 工具与 Feature 打通 | ✅ |
 
 ### 完整阶段记忆文件（归档参考）
 
@@ -141,6 +159,68 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
 | MainWindow, 主窗口, 面板 | `记忆/p4_main_window.md` |
 | theme, dark, light, QSS | `记忆/p4_theme.md` |
 | project, create_project, open_project | `记忆/p4_project_manager.md` |
+| ProjectSelector, 项目选择器, 启动界面 | `记忆/p4_project_selector.md` |
+| NewProjectDialog, 新建项目, 模板选择 | `记忆/p4_project_selector.md` |
+| Godot风格, 项目管理器, 项目列表 | `记忆/p4_project_selector.md` |
+| 异步节点, async def, node_llm_reasoning | `记忆/p1_agent_fix.md` |
+| 条件边编译, conditional_edges, graph_compiler | `记忆/p1_agent_fix.md` |
+| TRPG模板, graph.json, 边定义 | `记忆/p1_agent_fix.md` |
+| 项目编译的图, set_graph, compile_graph | `记忆/p1_agent_fix.md` |
+| Feature系统注册, feature_registry, enable_all | `记忆/p1_agent_fix.md` |
+| Prompt持久化, save_prompt, project_manager | `记忆/p2_editor_fix.md` |
+| 节点删除, remove_node, _delete | `记忆/p2_editor_fix.md` |
+| 拖拽连线, mousePressEvent, GraphEditorView | `记忆/p2_editor_fix.md` |
+| 自动生成ID, _node_counter, node_id | `记忆/p2_editor_fix.md` |
+| 工具注册, register_tool, get_all_tools | `记忆/p3_tool_feature_fix.md` |
+| ToolContext, get_tool_context, set_tool_context | `记忆/p3_tool_feature_fix.md` |
+| 工具连接DB, update_player_stat, give_item | `记忆/p3_tool_feature_fix.md` |
+| 工具真实调用, _run_test, invoke | `记忆/p3_tool_feature_fix.md` |
+| Feature事件订阅, on_enable, _on_command_executed | `记忆/p3_tool_feature_fix.md` |
+
+#### 优化阶段触发规则
+
+| 触发关键词 | 加载文件 |
+|-----------|----------|
+| BUG-014, self._logger, logger | `记忆/opt_p1_bugfix.md` |
+| BUG-015, QLabel, _line_count_int | `记忆/opt_p1_bugfix.md` |
+| BUG-016, _update_stats | `记忆/opt_p1_bugfix.md` |
+| QUAL-001, print→logger | `记忆/opt_p2_quality.md` |
+| QUAL-004, 未使用导入 | `记忆/opt_p2_quality.md` |
+| UX-020, 地点删除, _delete_location | `记忆/opt_p2_quality.md` |
+| safety, regex, 日志 | `记忆/opt_p2_quality.md` |
+| QUAL-008, server, 线程安全 | `记忆/opt_p2_quality.md` |
+| F-020, app.py, 命令行参数 | `记忆/opt_p2_quality.md` |
+| KEY-001, Ctrl+Z, Ctrl+Y, 撤销重做 | `记忆/opt_p3_shortcuts.md` |
+| KEY-002, Ctrl+S, 保存 | `记忆/opt_p3_shortcuts.md` |
+| KEY-003, F5, Shift+F5, 运行停止 | `记忆/opt_p3_shortcuts.md` |
+| KEY-004, Ctrl+N, Ctrl+O | `记忆/opt_p3_shortcuts.md` |
+| KEY-005, 快捷键, 剪切复制粘贴 | `记忆/opt_p3_shortcuts.md` |
+| F-001, Agent运行, run_agent | `记忆/opt_p3_shortcuts.md` |
+| F-003, 撤销重做 | `记忆/opt_p3_shortcuts.md` |
+| F-004, 标签页快捷键 | `记忆/opt_p3_shortcuts.md` |
+
+#### P1-P4 优化阶段触发规则（2026-05-03 新增）
+
+| 触发关键词 | 加载文件 |
+|-----------|----------|
+| BUG-017, _count_label, runtime_panel | `记忆/opt_p1_bugfix.md` |
+| BUG-018, tool_manager, logger | `记忆/opt_p1_bugfix.md` |
+| QUAL-002, 硬编码颜色, setStyleSheet | `记忆/opt_p2_quality.md` |
+| QUAL-004, 未使用导入, QPushButton | `记忆/opt_p2_quality.md` |
+| graph_editor, 字体, Microsoft YaHei | `记忆/opt_p2_quality.md` |
+| ItemEditor, 物品编辑器, knowledge | `记忆/opt_p3_ops_features.md` |
+| QuestEditor, 任务编辑器, knowledge | `记忆/opt_p3_ops_features.md` |
+| 日志搜索, _search_in_log, log_viewer | `记忆/opt_p3_ops_features.md` |
+| 文件监控, QFileSystemWatcher, 日志 | `记忆/opt_p3_ops_features.md` |
+| 编排器删除, _delete_agent, orchestrator | `记忆/opt_p3_ops_features.md` |
+| 链验证, _validate_chain, 循环依赖 | `记忆/opt_p3_ops_features.md` |
+| 正则验证, _pattern_status, safety | `记忆/opt_p3_ops_features.md` |
+| 输入历史, _input_history, debugger | `记忆/opt_p3_ops_features.md` |
+| 报告导出, _export_report, eval | `记忆/opt_p3_ops_features.md` |
+| ZIP打包, _package_project, deploy | `记忆/opt_p3_ops_features.md` |
+| HTTP认证, _AUTH_TOKEN, X-Auth-Token | `记忆/opt_p4_advanced.md` |
+| 跨平台截图, _capture_with_qt, screenshot | `记忆/opt_p4_advanced.md` |
+| 命令行参数, argparse, --project | `记忆/opt_p4_advanced.md` |
 
 ### 模块级触发规则（加载细粒度文件组）
 
@@ -192,6 +272,49 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
 | `presentation/main_window.py` | `p4_main_window.md` |
 | `presentation/theme/*.py` | `p4_theme.md` |
 | `presentation/project/manager.py` | `p4_project_manager.md` |
+| `presentation/dialogs/project_selector.py` | `p4_project_selector.md` |
+| `presentation/project/new_dialog.py` | `p4_project_selector.md` |
+
+#### 优化阶段执行规则
+
+| 修改文件 | 加载细粒度记忆 |
+|----------|---------------|
+| `prompt_editor.py` (logger 相关) | `opt_p1_bugfix.md` |
+| `runtime_panel.py` (stats 相关) | `opt_p1_bugfix.md` |
+| `main_window.py` (print→logger) | `opt_p2_quality.md` |
+| `knowledge_editor.py` (地点删除) | `opt_p2_quality.md` |
+| `safety_panel.py` (regex 日志) | `opt_p2_quality.md` |
+| `server.py` (线程安全) | `opt_p2_quality.md` |
+| `app.py` (命令行参数) | `opt_p2_quality.md` |
+| `main_window.py` (快捷键) | `opt_p3_shortcuts.md` |
+
+#### P1-P4 优化阶段执行规则（2026-05-03 新增）
+
+| 修改文件 | 加载细粒度记忆 |
+|----------|---------------|
+| `runtime_panel.py` (BUG-017, _count_label) | `opt_p1_bugfix.md` |
+| `tool_manager.py` (BUG-018, logger) | `opt_p1_bugfix.md` |
+| `main_window.py` (硬编码颜色) | `opt_p2_quality.md` |
+| `runtime_panel.py` (颜色主题化) | `opt_p2_quality.md` |
+| `event_monitor.py` (颜色主题化) | `opt_p2_quality.md` |
+| `knowledge_editor.py` (颜色主题化) | `opt_p2_quality.md` |
+| `eval_workbench.py` (颜色主题化) | `opt_p2_quality.md` |
+| `log_viewer.py` (颜色主题化) | `opt_p2_quality.md` |
+| `safety_panel.py` (颜色主题化) | `opt_p2_quality.md` |
+| `project_selector.py` (QSS模板化) | `opt_p2_quality.md` |
+| `graph_editor.py` (跨平台字体) | `opt_p2_quality.md` |
+| `tool_manager.py` (未使用导入) | `opt_p2_quality.md` |
+| `app.py` (print→logger) | `opt_p2_quality.md` |
+| `knowledge_editor.py` (ItemEditor/QuestEditor) | `opt_p3_ops_features.md` |
+| `log_viewer.py` (搜索、文件监控) | `opt_p3_ops_features.md` |
+| `orchestrator.py` (删除、链验证) | `opt_p3_ops_features.md` |
+| `safety_panel.py` (正则验证) | `opt_p3_ops_features.md` |
+| `runtime_panel.py` (输入历史) | `opt_p3_ops_features.md` |
+| `eval_workbench.py` (报告导出) | `opt_p3_ops_features.md` |
+| `deploy_manager.py` (ZIP打包) | `opt_p3_ops_features.md` |
+| `main_window.py` (文件保存、撤销重做) | `opt_p4_advanced.md` |
+| `server.py` (HTTP认证、跨平台截图) | `opt_p4_advanced.md` |
+| `app.py` (命令行参数) | `opt_p4_advanced.md` |
 
 ### 按开发任务触发
 
@@ -216,7 +339,13 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
    - Core 层 → 加载 p1_*.md
    - Feature AI 层 → 加载 p2_*.md
    - Feature Services 层 → 加载 p3_*.md
-   - Presentation 层 → 加载 p4_*.md
+   - Presentation 层 → 加载 p4_*.md (4个文件)
+   - 优化阶段 P1 → 加载 opt_p1_bugfix.md
+   - 优化阶段 P2 → 加载 opt_p2_quality.md
+   - 优化阶段 P3 → 加载 opt_p3_shortcuts.md
+   - Agent运行流程P1 → 加载 p1_agent_fix.md
+   - 编辑器体验P2 → 加载 p2_editor_fix.md
+   - 工具Feature打通P3 → 加载 p3_tool_feature_fix.md
 ```
 
 ---
@@ -246,7 +375,13 @@ d:\Game-Master-Agent\
     ├── p1_*.md              # P1 Core 细粒度 (5个)
     ├── p2_*.md              # P2 Feature AI 细粒度 (7个)
     ├── p3_*.md              # P3 Feature Services 细粒度 (3个)
-    ├── p4_*.md              # P4 Presentation 细粒度 (3个)
+    ├── p4_*.md              # P4 Presentation 细粒度 (4个)
+    ├── opt_p1_*.md          # P1 回归 Bug 修复优化
+    ├── opt_p2_*.md          # P2 代码质量优化
+    ├── opt_p3_*.md          # P3 交互与快捷键优化
+    ├── p1_agent_fix.md      # P1 Agent运行流程修复
+    ├── p2_editor_fix.md     # P2 编辑器体验修复
+    ├── p3_tool_feature_fix.md # P3 工具与Feature打通
     ├── *_p*.md              # 完整阶段文档 (归档)
     └── workbench_*.md       # Workbench 文档 (归档)
 ```
@@ -254,6 +389,6 @@ d:\Game-Master-Agent\
 ---
 
 *最后更新: 2026-05-03*
-*当前阶段: **细粒度记忆重构完成** ✅*
+*当前阶段: **细粒度记忆重构完成 + 优化阶段文档完成** ✅*
 *架构状态: 四层重构完成 (P0 ✅, P1 ✅, P2 ✅, P3 ✅, P4 ✅, P5 ✅, P6 ✅, P7 ✅)，已弃用 Vue3，全面转向 PyQt6*
-*记忆文件: 27个细粒度文件 + 11个归档文件*
+*记忆文件: 31个细粒度文件 + 11个归档文件*

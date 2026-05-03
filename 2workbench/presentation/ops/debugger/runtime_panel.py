@@ -24,6 +24,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from foundation.event_bus import event_bus, Event
 from foundation.logger import get_logger
+from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
 
@@ -54,7 +55,8 @@ class ConsoleOutput(QWidget):
         toolbar.addStretch()
 
         self._line_count = QLabel("行数: 0")
-        self._line_count.setStyleSheet("color: #858585; font-size: 11px;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        self._line_count.setStyleSheet(f"color: {text_secondary}; font-size: 11px;")
         toolbar.addWidget(self._line_count)
 
         layout.addLayout(toolbar)
@@ -70,12 +72,19 @@ class ConsoleOutput(QWidget):
 
         self._count = 0
         self._line_count_int = 0  # 行数统计（整数）
+        self._count_label = QLabel("字符: 0")  # 字符数标签
+        self._count_label.setStyleSheet(f"color: {text_secondary}; font-size: 11px;")
+        toolbar.addWidget(self._count_label)
 
-    def append_text(self, text: str, color: str = "#cccccc") -> None:
+    def append_text(self, text: str, color: str = "") -> None:
         """追加文本"""
         timestamp = datetime.now().strftime("%H:%M:%S")
+        text_secondary = theme_manager.get_color("text_secondary")
+        text_primary = theme_manager.get_color("text_primary")
+        if not color:
+            color = text_primary
         self._output.append(
-            f'<span style="color: #858585;">[{timestamp}]</span> '
+            f'<span style="color: {text_secondary};">[{timestamp}]</span> '
             f'<span style="color: {color};">{text}</span>'
         )
         self._count += 1
@@ -86,19 +95,19 @@ class ConsoleOutput(QWidget):
 
     def append_system(self, text: str) -> None:
         """系统消息（灰色）"""
-        self.append_text(text, "#858585")
+        self.append_text(text, theme_manager.get_color("text_secondary"))
 
     def append_user(self, text: str) -> None:
         """用户输入（白色）"""
-        self.append_text(f"👤 {text}", "#cccccc")
+        self.append_text(f"👤 {text}", theme_manager.get_color("text_primary"))
 
     def append_assistant(self, text: str) -> None:
         """Agent 输出（青色）"""
-        self.append_text(f"🤖 {text}", "#4ec9b0")
+        self.append_text(f"🤖 {text}", theme_manager.get_color("success"))
 
     def append_error(self, text: str) -> None:
         """错误消息（红色）"""
-        self.append_text(f"❌ {text}", "#f44747")
+        self.append_text(f"❌ {text}", theme_manager.get_color("error"))
 
     def append_stream_token(self, token: str) -> None:
         """流式 Token（追加到最后一段）"""
@@ -116,7 +125,7 @@ class ConsoleOutput(QWidget):
 
     def append_command(self, command: str, result: str) -> None:
         """命令执行记录"""
-        self.append_text(f"⚡ 命令: {command} → {result}", "#dcdcaa")
+        self.append_text(f"⚡ 命令: {command} → {result}", theme_manager.get_color("warning"))
 
     def clear(self) -> None:
         """清空输出"""
@@ -245,7 +254,8 @@ class PerformanceMetrics(QWidget):
     def _create_metric_label(self, text: str) -> QLabel:
         """创建统一样式的指标标签"""
         label = QLabel(text)
-        label.setStyleSheet("font-size: 18px; font-weight: bold; color: #858585;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        label.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {text_secondary};")
         return label
 
     def _setup_ui(self) -> None:
@@ -296,6 +306,8 @@ class RuntimePanel(BaseWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._running = False
+        self._input_history: list[str] = []
+        self._history_index = 0
         self._setup_ui()
         self._setup_eventbus()
 
@@ -418,9 +430,26 @@ class RuntimePanel(BaseWidget):
         text = self._input_edit.text().strip()
         if not text:
             return
+        # 添加到历史
+        self._input_history.append(text)
+        self._history_index = len(self._input_history)
         self._console.append_user(text)
         self._input_edit.clear()
         self.emit_event("ui.debugger.input", {"text": text})
+
+    def keyPressEvent(self, event):
+        """拦截上下键浏览历史"""
+        if event.key() == Qt.Key.Key_Up and self._input_history:
+            self._history_index = max(0, self._history_index - 1)
+            self._input_edit.setText(self._input_history[self._history_index])
+        elif event.key() == Qt.Key.Key_Down and self._input_history:
+            self._history_index = min(len(self._input_history), self._history_index + 1)
+            if self._history_index < len(self._input_history):
+                self._input_edit.setText(self._input_history[self._history_index])
+            else:
+                self._input_edit.clear()
+        else:
+            super().keyPressEvent(event)
 
     # --- EventBus 回调 ---
 

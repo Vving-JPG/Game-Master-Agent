@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from foundation.logger import get_logger
+from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
 
@@ -383,6 +384,310 @@ class LocationEditor(QWidget):
         return list(self._locations)
 
 
+class ItemEditor(QWidget):
+    """物品编辑器"""
+
+    data_changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._items: list[dict] = []
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # 左侧列表
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(4, 4, 4, 4)
+
+        self._item_list = QTableWidget()
+        self._item_list.setColumnCount(4)
+        self._item_list.setHorizontalHeaderLabels(["ID", "名称", "类型", "描述"])
+        self._item_list.horizontalHeader().setStretchLastSection(True)
+        self._item_list.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._item_list.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._item_list.currentCellChanged.connect(self._on_item_selected)
+        left_layout.addWidget(self._item_list)
+
+        btn_layout = QHBoxLayout()
+        self._btn_add = StyledButton("+ 添加", style_type="primary")
+        self._btn_add.clicked.connect(self._add_item)
+        btn_layout.addWidget(self._btn_add)
+
+        self._btn_delete = StyledButton("🗑️ 删除", style_type="danger")
+        self._btn_delete.clicked.connect(self._delete_item)
+        btn_layout.addWidget(self._btn_delete)
+        left_layout.addLayout(btn_layout)
+
+        layout.addWidget(left, 2)
+
+        # 右侧编辑面板
+        right = QWidget()
+        right.setMaximumWidth(400)
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+
+        form = QFormLayout()
+        self._name_edit = QLineEdit()
+        form.addRow("名称:", self._name_edit)
+
+        self._type_combo = QComboBox()
+        self._type_combo.addItems(["武器", "防具", "消耗品", "任务物品", "材料", "其他"])
+        form.addRow("类型:", self._type_combo)
+
+        self._desc_edit = QTextEdit()
+        self._desc_edit.setMaximumHeight(100)
+        form.addRow("描述:", self._desc_edit)
+
+        self._effect_edit = QTextEdit()
+        self._effect_edit.setMaximumHeight(60)
+        self._effect_edit.setPlaceholderText("物品效果描述（可选）")
+        form.addRow("效果:", self._effect_edit)
+
+        right_layout.addLayout(form)
+
+        self._btn_save = StyledButton("💾 保存修改", style_type="primary")
+        self._btn_save.clicked.connect(self._save_item)
+        right_layout.addWidget(self._btn_save)
+
+        right_layout.addStretch()
+        layout.addWidget(right, 1)
+
+    def load_data(self, items: list[dict]) -> None:
+        self._items = items
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        self._item_list.setRowCount(0)
+        for i, item in enumerate(self._items):
+            row = self._item_list.rowCount()
+            self._item_list.insertRow(row)
+            self._item_list.setItem(row, 0, QTableWidgetItem(str(item.get("id", i + 1))))
+            self._item_list.setItem(row, 1, QTableWidgetItem(item.get("name", "")))
+            self._item_list.setItem(row, 2, QTableWidgetItem(item.get("type", "")))
+            self._item_list.setItem(row, 3, QTableWidgetItem(item.get("description", "")[:50]))
+
+    def _on_item_selected(self, current_row: int, current_column: int, previous_row: int, previous_column: int) -> None:
+        row = current_row
+        if row < 0 or row >= len(self._items):
+            return
+        item = self._items[row]
+        self._name_edit.setText(item.get("name", ""))
+        self._type_combo.setCurrentText(item.get("type", "其他"))
+        self._desc_edit.setPlainText(item.get("description", ""))
+        self._effect_edit.setPlainText(item.get("effect", ""))
+
+    def _add_item(self) -> None:
+        name = self._name_edit.text().strip()
+        if not name:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "提示", "物品名称不能为空")
+            return
+        item = {
+            "id": len(self._items) + 1,
+            "name": name,
+            "type": self._type_combo.currentText(),
+            "description": self._desc_edit.toPlainText(),
+            "effect": self._effect_edit.toPlainText(),
+        }
+        self._items.append(item)
+        self._refresh_list()
+        self._item_list.selectRow(len(self._items) - 1)
+        self.data_changed.emit()
+
+    def _save_item(self) -> None:
+        row = self._item_list.currentRow()
+        if row < 0:
+            return
+        self._items[row]["name"] = self._name_edit.text()
+        self._items[row]["type"] = self._type_combo.currentText()
+        self._items[row]["description"] = self._desc_edit.toPlainText()
+        self._items[row]["effect"] = self._effect_edit.toPlainText()
+        self._refresh_list()
+        self._item_list.selectRow(row)
+        self.data_changed.emit()
+
+    def _delete_item(self) -> None:
+        row = self._item_list.currentRow()
+        if row < 0:
+            return
+        from PyQt6.QtWidgets import QMessageBox
+        item_name = self._items[row].get("name", f"物品_{row+1}")
+        reply = QMessageBox.question(
+            self, "确认删除", f"确定删除物品 '{item_name}' 吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._items.pop(row)
+            self._refresh_list()
+            self._name_edit.clear()
+            self._desc_edit.clear()
+            self._effect_edit.clear()
+            self.data_changed.emit()
+
+    def get_data(self) -> list[dict]:
+        return list(self._items)
+
+
+class QuestEditor(QWidget):
+    """任务编辑器"""
+
+    data_changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._quests: list[dict] = []
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # 左侧列表
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(4, 4, 4, 4)
+
+        self._quest_list = QTableWidget()
+        self._quest_list.setColumnCount(5)
+        self._quest_list.setHorizontalHeaderLabels(["ID", "名称", "状态", "奖励", "描述"])
+        self._quest_list.horizontalHeader().setStretchLastSection(True)
+        self._quest_list.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._quest_list.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._quest_list.currentCellChanged.connect(self._on_quest_selected)
+        left_layout.addWidget(self._quest_list)
+
+        btn_layout = QHBoxLayout()
+        self._btn_add = StyledButton("+ 添加", style_type="primary")
+        self._btn_add.clicked.connect(self._add_quest)
+        btn_layout.addWidget(self._btn_add)
+
+        self._btn_delete = StyledButton("🗑️ 删除", style_type="danger")
+        self._btn_delete.clicked.connect(self._delete_quest)
+        btn_layout.addWidget(self._btn_delete)
+        left_layout.addLayout(btn_layout)
+
+        layout.addWidget(left, 2)
+
+        # 右侧编辑面板
+        right = QWidget()
+        right.setMaximumWidth(400)
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+
+        form = QFormLayout()
+        self._name_edit = QLineEdit()
+        form.addRow("名称:", self._name_edit)
+
+        self._status_combo = QComboBox()
+        self._status_combo.addItems(["未开始", "进行中", "已完成", "已失败"])
+        form.addRow("状态:", self._status_combo)
+
+        self._reward_edit = QLineEdit()
+        self._reward_edit.setPlaceholderText("完成奖励描述")
+        form.addRow("奖励:", self._reward_edit)
+
+        self._prereq_edit = QLineEdit()
+        self._prereq_edit.setPlaceholderText("前置任务 ID（逗号分隔）")
+        form.addRow("前置条件:", self._prereq_edit)
+
+        self._desc_edit = QTextEdit()
+        self._desc_edit.setMaximumHeight(100)
+        form.addRow("描述:", self._desc_edit)
+
+        right_layout.addLayout(form)
+
+        self._btn_save = StyledButton("💾 保存修改", style_type="primary")
+        self._btn_save.clicked.connect(self._save_quest)
+        right_layout.addWidget(self._btn_save)
+
+        right_layout.addStretch()
+        layout.addWidget(right, 1)
+
+    def load_data(self, quests: list[dict]) -> None:
+        self._quests = quests
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        self._quest_list.setRowCount(0)
+        for i, quest in enumerate(self._quests):
+            row = self._quest_list.rowCount()
+            self._quest_list.insertRow(row)
+            self._quest_list.setItem(row, 0, QTableWidgetItem(str(quest.get("id", i + 1))))
+            self._quest_list.setItem(row, 1, QTableWidgetItem(quest.get("name", "")))
+            self._quest_list.setItem(row, 2, QTableWidgetItem(quest.get("status", "未开始")))
+            self._quest_list.setItem(row, 3, QTableWidgetItem(quest.get("reward", "")[:30]))
+            self._quest_list.setItem(row, 4, QTableWidgetItem(quest.get("description", "")[:50]))
+
+    def _on_quest_selected(self, current_row: int, current_column: int, previous_row: int, previous_column: int) -> None:
+        row = current_row
+        if row < 0 or row >= len(self._quests):
+            return
+        quest = self._quests[row]
+        self._name_edit.setText(quest.get("name", ""))
+        self._status_combo.setCurrentText(quest.get("status", "未开始"))
+        self._reward_edit.setText(quest.get("reward", ""))
+        self._prereq_edit.setText(",".join(str(x) for x in quest.get("prerequisites", [])))
+        self._desc_edit.setPlainText(quest.get("description", ""))
+
+    def _add_quest(self) -> None:
+        name = self._name_edit.text().strip()
+        if not name:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "提示", "任务名称不能为空")
+            return
+        quest = {
+            "id": len(self._quests) + 1,
+            "name": name,
+            "status": self._status_combo.currentText(),
+            "reward": self._reward_edit.text(),
+            "prerequisites": [x.strip() for x in self._prereq_edit.text().split(",") if x.strip()],
+            "description": self._desc_edit.toPlainText(),
+        }
+        self._quests.append(quest)
+        self._refresh_list()
+        self._quest_list.selectRow(len(self._quests) - 1)
+        self.data_changed.emit()
+
+    def _save_quest(self) -> None:
+        row = self._quest_list.currentRow()
+        if row < 0:
+            return
+        self._quests[row]["name"] = self._name_edit.text()
+        self._quests[row]["status"] = self._status_combo.currentText()
+        self._quests[row]["reward"] = self._reward_edit.text()
+        self._quests[row]["prerequisites"] = [x.strip() for x in self._prereq_edit.text().split(",") if x.strip()]
+        self._quests[row]["description"] = self._desc_edit.toPlainText()
+        self._refresh_list()
+        self._quest_list.selectRow(row)
+        self.data_changed.emit()
+
+    def _delete_quest(self) -> None:
+        row = self._quest_list.currentRow()
+        if row < 0:
+            return
+        from PyQt6.QtWidgets import QMessageBox
+        quest_name = self._quests[row].get("name", f"任务_{row+1}")
+        reply = QMessageBox.question(
+            self, "确认删除", f"确定删除任务 '{quest_name}' 吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._quests.pop(row)
+            self._refresh_list()
+            self._name_edit.clear()
+            self._reward_edit.clear()
+            self._prereq_edit.clear()
+            self._desc_edit.clear()
+            self.data_changed.emit()
+
+    def get_data(self) -> list[dict]:
+        return list(self._quests)
+
+
 class KnowledgeEditor(BaseWidget):
     """知识库编辑器 — 主面板"""
 
@@ -416,17 +721,13 @@ class KnowledgeEditor(BaseWidget):
         self._loc_editor = LocationEditor()
         self._tabs.addTab(self._loc_editor, "📍 地点")
 
-        # 物品编辑器（简化版）
-        self._item_placeholder = QLabel("📦 物品编辑器\n（后续扩展）")
-        self._item_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._item_placeholder.setStyleSheet("color: #858585; font-size: 14px;")
-        self._tabs.addTab(self._item_placeholder, "📦 物品")
+        # 物品编辑器
+        self._item_editor = ItemEditor()
+        self._tabs.addTab(self._item_editor, "📦 物品")
 
-        # 任务编辑器（简化版）
-        self._quest_placeholder = QLabel("📋 任务编辑器\n（后续扩展）")
-        self._quest_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._quest_placeholder.setStyleSheet("color: #858585; font-size: 14px;")
-        self._tabs.addTab(self._quest_placeholder, "📋 任务")
+        # 任务编辑器
+        self._quest_editor = QuestEditor()
+        self._tabs.addTab(self._quest_editor, "📋 任务")
 
         layout.addWidget(self._tabs)
 

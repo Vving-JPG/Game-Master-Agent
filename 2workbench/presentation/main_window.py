@@ -197,7 +197,8 @@ class CenterPanel(BaseWidget):
             "或 File > Open 打开已有项目"
         )
         self._welcome_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._welcome_widget.setStyleSheet("font-size: 16px; color: #858585;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        self._welcome_widget.setStyleSheet(f"font-size: 16px; color: {text_secondary};")
         self.tab_widget.addTab(self._welcome_widget, "Welcome")
 
         # 编辑器标签页（默认隐藏，打开项目后显示）
@@ -325,7 +326,8 @@ class RightPanel(BaseWidget):
         # 添加默认提示
         self.props_hint = QLabel("选择一个节点或工具查看属性")
         self.props_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.props_hint.setStyleSheet("color: #858585; font-size: 13px; padding: 20px;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        self.props_hint.setStyleSheet(f"color: {text_secondary}; font-size: 13px; padding: 20px;")
         self.props_layout.addRow(self.props_hint)
         
         self.props_scroll.setWidget(self.props_container)
@@ -376,7 +378,8 @@ class RightPanel(BaseWidget):
         # 节点名称
         name_label = QLabel("节点名称:")
         name_value = QLabel(node_data.get("name", "未知"))
-        name_value.setStyleSheet("font-weight: bold; color: #4ec9b0;")
+        success_color = theme_manager.get_color("success")
+        name_value.setStyleSheet(f"font-weight: bold; color: {success_color};")
         self.props_layout.addRow(name_label, name_value)
         
         # 节点类型
@@ -389,7 +392,8 @@ class RightPanel(BaseWidget):
             desc_label = QLabel("描述:")
             desc_value = QLabel(node_data["description"])
             desc_value.setWordWrap(True)
-            desc_value.setStyleSheet("color: #cccccc;")
+            text_primary = theme_manager.get_color("text_primary")
+            desc_value.setStyleSheet(f"color: {text_primary};")
             self.props_layout.addRow(desc_label, desc_value)
         
         # 配置参数
@@ -413,7 +417,8 @@ class RightPanel(BaseWidget):
         # 工具名称
         name_label = QLabel("工具名称:")
         name_value = QLabel(tool_data.get("name", "未知"))
-        name_value.setStyleSheet("font-weight: bold; color: #dcdcaa;")
+        warning_color = theme_manager.get_color("warning")
+        name_value.setStyleSheet(f"font-weight: bold; color: {warning_color};")
         self.props_layout.addRow(name_label, name_value)
         
         # 描述
@@ -421,7 +426,8 @@ class RightPanel(BaseWidget):
             desc_label = QLabel("描述:")
             desc_value = QLabel(tool_data["description"])
             desc_value.setWordWrap(True)
-            desc_value.setStyleSheet("color: #cccccc;")
+            text_primary = theme_manager.get_color("text_primary")
+            desc_value.setStyleSheet(f"color: {text_primary};")
             self.props_layout.addRow(desc_label, desc_value)
         
         # 参数 Schema
@@ -442,9 +448,11 @@ class RightPanel(BaseWidget):
     def update_agent_status(self, status: str, turn: int = 0, event: str = ""):
         """更新 Agent 状态显示"""
         self.agent_status_label.setText(status)
-        self.agent_status_label.setStyleSheet(
-            "color: #4ec9b0;" if status == "运行中" else "color: #858585;"
-        )
+        if status == "运行中":
+            color = theme_manager.get_color("success")
+        else:
+            color = theme_manager.get_color("text_secondary")
+        self.agent_status_label.setStyleSheet(f"color: {color};")
         self.turn_num_label.setText(str(turn))
         self.turn_event_label.setText(event if event else "-")
     
@@ -842,16 +850,17 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(spacer)
         
         # 状态信息显示在工具栏右侧
+        text_secondary = theme_manager.get_color("text_secondary")
         self._toolbar_status_agent = QLabel("🤖 未加载")
-        self._toolbar_status_agent.setStyleSheet("color: #858585; padding: 0 10px;")
+        self._toolbar_status_agent.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
         toolbar.addWidget(self._toolbar_status_agent)
-        
+
         self._toolbar_status_model = QLabel("🧠 --")
-        self._toolbar_status_model.setStyleSheet("color: #858585; padding: 0 10px;")
+        self._toolbar_status_model.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
         toolbar.addWidget(self._toolbar_status_model)
-        
+
         self._toolbar_status_theme = QLabel("🎨 Dark")
-        self._toolbar_status_theme.setStyleSheet("color: #858585; padding: 0 10px;")
+        self._toolbar_status_theme.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
         toolbar.addWidget(self._toolbar_status_theme)
 
     def _setup_statusbar(self) -> None:
@@ -879,16 +888,19 @@ class MainWindow(QMainWindow):
     def _on_turn_start(self, event: Event) -> None:
         turn = event.get("turn", 0)
         self._toolbar_status_agent.setText(f"🤖 运行中 (Turn {turn})")
-        self._toolbar_status_agent.setStyleSheet("color: #4ec9b0; padding: 0 10px;")
+        success_color = theme_manager.get_color("success")
+        self._toolbar_status_agent.setStyleSheet(f"color: {success_color}; padding: 0 10px;")
 
     def _on_turn_end(self, event: Event) -> None:
         self._toolbar_status_agent.setText("🤖 空闲")
-        self._toolbar_status_agent.setStyleSheet("color: #858585; padding: 0 10px;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        self._toolbar_status_agent.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
 
     def _on_agent_error(self, event: Event) -> None:
         error = event.get("error", "未知错误")
         self._toolbar_status_agent.setText(f"🤖 错误")
-        self._toolbar_status_agent.setStyleSheet("color: #f44336; padding: 0 10px;")
+        error_color = theme_manager.get_color("error")
+        self._toolbar_status_agent.setStyleSheet(f"color: {error_color}; padding: 0 10px;")
 
     def _on_stream_token(self, event: Event) -> None:
         token = event.get("token", "")
@@ -957,8 +969,10 @@ class MainWindow(QMainWindow):
                 self._show_message("项目名称不能为空", 3000)
                 return
             # 通过信号触发统一处理
+            # 参数: name, template, directory, project_root
+            project_dir = data.get("directory", "")
             self.create_project_requested.emit(
-                data["name"], data["template"], data.get("description", ""), ""
+                data["name"], data["template"], project_dir, ""
             )
 
     def _on_open_project(self) -> None:
@@ -1089,7 +1103,7 @@ class MainWindow(QMainWindow):
         editor.textChanged.connect(on_text_changed)
         
         # 只保留字体设置，颜色由全局 QSS 控制
-        editor.setStyleSheet("font-family: 'Consolas', 'Monaco', 'Courier New', monospace;")
+        editor.setStyleSheet("font-family: 'Cascadia Code', 'Consolas', 'Monaco', 'Courier New', monospace;")
         
         # 添加到标签页
         tab_name = f"📄 {path.name}"
@@ -1371,7 +1385,8 @@ class MainWindow(QMainWindow):
                 
                 # 提示
                 hint = QLabel("↑↓ 选择 · Enter 执行 · Esc 关闭")
-                hint.setStyleSheet("color: #858585; font-size: 11px;")
+                text_secondary = theme_manager.get_color("text_secondary")
+                hint.setStyleSheet(f"color: {text_secondary}; font-size: 11px;")
                 hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 layout.addWidget(hint)
                 

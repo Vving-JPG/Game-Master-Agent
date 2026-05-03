@@ -138,11 +138,22 @@ class DeployManager(BaseWidget):
         layout.addWidget(self._tabs)
 
     def _package_project(self) -> None:
-        """打包项目"""
+        """打包项目为 ZIP"""
+        import zipfile
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
         from presentation.project.manager import project_manager
 
         if not project_manager.is_open:
             self._pack_log.append("❌ 没有打开的项目")
+            QMessageBox.warning(self, "提示", "请先打开一个项目")
+            return
+
+        path = project_manager.project_path
+        name = project_manager.current_project.name if project_manager.current_project else "project"
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "保存打包文件", f"{name}.zip", "ZIP (*.zip)")
+        if not save_path:
             return
 
         self._deploy_status = "packaging"
@@ -150,36 +161,35 @@ class DeployManager(BaseWidget):
         self._progress.setVisible(True)
         self._progress.setValue(0)
 
-        project_path = project_manager.project_path
-        if not project_path:
-            return
+        try:
+            self._pack_log.append(f"📦 开始打包: {name}")
+            self._pack_log.append(f"   项目路径: {path}")
 
-        name = self._name_edit.text().strip() or "agent_service"
-        version = self._version_edit.text().strip()
+            with zipfile.ZipFile(save_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                files = list(path.rglob("*"))
+                total = len([f for f in files if f.is_file()])
+                processed = 0
 
-        # 模拟打包过程
-        self._pack_log.append(f"📦 开始打包: {name} v{version}")
-        self._pack_log.append(f"   项目路径: {project_path}")
-        self._progress.setValue(20)
+                for file in files:
+                    if file.is_file() and not file.name.endswith('.pyc'):
+                        arcname = file.relative_to(path.parent)
+                        zf.write(file, arcname)
+                        processed += 1
+                        progress = int((processed / total) * 100) if total > 0 else 100
+                        self._progress.setValue(progress)
 
-        # 收集文件列表
-        files = list(project_path.rglob("*"))
-        file_count = len([f for f in files if f.is_file()])
-        self._pack_log.append(f"   文件数: {file_count}")
-        self._progress.setValue(50)
-
-        # 模拟生成服务入口
-        self._pack_log.append(f"   框架: {self._framework_combo.currentText()}")
-        self._pack_log.append(f"   端口: {self._port_spin.text()}")
-        self._progress.setValue(80)
-
-        self._pack_log.append(f"   生成入口文件: server.py")
-        self._progress.setValue(100)
-
-        self._deploy_status = "idle"
-        self._status_label.setText("✅ 打包完成")
-        self._pack_log.append(f"✅ 打包完成: {name}_v{version}")
-        logger.info(f"项目打包完成: {name} v{version}")
+            self._progress.setValue(100)
+            self._deploy_status = "idle"
+            self._status_label.setText("✅ 打包完成")
+            self._pack_log.append(f"✅ 打包完成: {save_path}")
+            logger.info(f"项目已打包到: {save_path}")
+            QMessageBox.information(self, "打包成功", f"项目已打包到:\n{save_path}")
+        except Exception as e:
+            self._deploy_status = "error"
+            self._status_label.setText("❌ 打包失败")
+            self._pack_log.append(f"❌ 打包失败: {e}")
+            logger.error(f"打包失败: {e}")
+            QMessageBox.critical(self, "打包失败", str(e))
 
     def _start_service(self) -> None:
         """启动服务"""

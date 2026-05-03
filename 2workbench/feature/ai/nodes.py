@@ -31,7 +31,7 @@ from .events import (
     COMMAND_PARSED, COMMAND_EXECUTED, MEMORY_STORED,
 )
 from .prompt_builder import PromptBuilder
-from .command_parser import parse_llm_output
+from .command_parser import parse_llm_output, ParsedCommand
 from .tools import ALL_TOOLS, get_tools_schema
 
 logger = get_logger(__name__)
@@ -216,7 +216,7 @@ async def node_parse_output(state: AgentState) -> dict[str, Any]:
         })
 
     all_commands = parsed.commands + [
-        __import__("feature.ai.command_parser", fromlist=["ParsedCommand"]).ParsedCommand(
+        ParsedCommand(
             intent=c["intent"], params=c.get("params", {})
         ) for c in tool_commands
     ]

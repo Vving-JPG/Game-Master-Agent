@@ -9,10 +9,12 @@ from typing import Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QLabel, QComboBox, QCheckBox, QFileDialog,
+    QLineEdit, QPushButton,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QFileSystemWatcher
 
 from foundation.logger import get_logger
+from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
 
@@ -32,6 +34,8 @@ class LogViewer(BaseWidget):
             "WARNING": True,
             "ERROR": True,
         }
+        self._watcher = QFileSystemWatcher()
+        self._watcher.fileChanged.connect(self._on_file_changed)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -44,6 +48,17 @@ class LogViewer(BaseWidget):
         self._btn_open = StyledButton("📂 打开日志", style_type="secondary")
         self._btn_open.clicked.connect(self._open_log)
         toolbar.addWidget(self._btn_open)
+
+        # 搜索框
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("🔍 搜索日志...")
+        self._search_edit.setMaximumWidth(200)
+        self._search_edit.returnPressed.connect(self._search_in_log)
+        toolbar.addWidget(self._search_edit)
+
+        self._btn_search = StyledButton("查找", style_type="ghost")
+        self._btn_search.clicked.connect(self._search_in_log)
+        toolbar.addWidget(self._btn_search)
 
         toolbar.addStretch()
 
@@ -78,6 +93,28 @@ class LogViewer(BaseWidget):
     def _toggle_filter(self, level: str, state) -> None:
         self._filters[level] = bool(state)
 
+    def _search_in_log(self) -> None:
+        """在日志中搜索关键词"""
+        keyword = self._search_edit.text().strip()
+        if not keyword:
+            return
+
+        cursor = self._output.textCursor()
+        document = self._output.document()
+
+        # 从当前位置开始查找
+        found = document.find(keyword, cursor)
+        if not found.isNull():
+            self._output.setTextCursor(found)
+            self._output.ensureCursorVisible()
+        else:
+            # 如果没找到，从头开始查找
+            cursor.movePosition(cursor.MoveOperation.Start)
+            found = document.find(keyword, cursor)
+            if not found.isNull():
+                self._output.setTextCursor(found)
+                self._output.ensureCursorVisible()
+
     def _open_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "打开日志文件", "", "日志 (*.log);;所有文件 (*)"
@@ -92,8 +129,26 @@ class LogViewer(BaseWidget):
         try:
             content = self._log_path.read_text(encoding="utf-8")
             self._output.setPlainText(content)
+            # 添加文件监控
+            if str(self._log_path) not in self._watcher.files():
+                self._watcher.addPath(str(self._log_path))
         except Exception as e:
             logger.error(f"日志加载失败: {e}")
+
+    def _on_file_changed(self, path: str) -> None:
+        """文件变化时自动刷新"""
+        if self._auto_scroll and self._log_path and str(self._log_path) == path:
+            try:
+                if self._log_path.exists():
+                    content = self._log_path.read_text(encoding="utf-8")
+                    self._output.setPlainText(content)
+                    scrollbar = self._output.verticalScrollBar()
+                    scrollbar.setValue(scrollbar.maximum())
+                    # 重新添加监控（某些编辑器会创建新文件）
+                    if str(self._log_path) not in self._watcher.files():
+                        self._watcher.addPath(str(self._log_path))
+            except Exception:
+                pass
 
     def append_log(self, level: str, message: str, source: str = "") -> None:
         """追加日志条目"""
@@ -101,18 +156,20 @@ class LogViewer(BaseWidget):
             return
 
         color_map = {
-            "DEBUG": "#858585",
-            "INFO": "#cccccc",
-            "WARNING": "#dcdcaa",
-            "ERROR": "#f44747",
+            "DEBUG": theme_manager.get_color("text_secondary"),
+            "INFO": theme_manager.get_color("text_primary"),
+            "WARNING": theme_manager.get_color("warning"),
+            "ERROR": theme_manager.get_color("error"),
         }
-        color = color_map.get(level, "#cccccc")
+        color = color_map.get(level, theme_manager.get_color("text_primary"))
         timestamp = datetime.now().strftime("%H:%M:%S")
 
+        text_secondary = theme_manager.get_color("text_secondary")
+        text_disabled = theme_manager.get_color("border")
         self._output.append(
-            f'<span style="color: #858585;">[{timestamp}]</span> '
+            f'<span style="color: {text_secondary};">[{timestamp}]</span> '
             f'<span style="color: {color}; font-weight: bold;">[{level}]</span> '
-            f'<span style="color: #6e6e6e;">{source}</span> '
+            f'<span style="color: {text_disabled};">{source}</span> '
             f'<span style="color: {color};">{message}</span>'
         )
 

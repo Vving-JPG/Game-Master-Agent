@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QTextEdit, QLineEdit,
     QLabel, QFormLayout, QDialog, QDialogButtonBox,
     QComboBox, QCheckBox, QGroupBox, QTextBrowser,
-    QPushButton,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
@@ -392,7 +391,7 @@ class ToolManagerWidget(BaseWidget):
             self._tools.append(tool)
             self._refresh_list()
             self.tools_changed.emit(self._tools)
-            self._logger.info(f"自定义工具添加: {name}")
+            logger.info(f"自定义工具添加: {name}")
 
             # === 注册到 Agent 工具集 ===
             self._register_tool_to_agent(tool)
@@ -412,9 +411,9 @@ class ToolManagerWidget(BaseWidget):
                 parameters_schema=tool.parameters,
                 handler=handler,
             )
-            self._logger.info(f"工具已注册到 Agent: {tool.name}")
+            logger.info(f"工具已注册到 Agent: {tool.name}")
         except Exception as e:
-            self._logger.error(f"工具注册到 Agent 失败: {e}")
+            logger.error(f"工具注册到 Agent 失败: {e}")
 
     def _run_test(self) -> None:
         """真实调用选中的工具"""

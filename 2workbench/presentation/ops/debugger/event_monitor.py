@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt, QEvent
 
 from foundation.event_bus import event_bus, Event
 from foundation.logger import get_logger
+from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
 
@@ -54,7 +55,8 @@ class EventMonitor(BaseWidget):
         toolbar.addStretch()
 
         self._count_label = QLabel("事件: 0")
-        self._count_label.setStyleSheet("color: #858585; font-size: 11px;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        self._count_label.setStyleSheet(f"color: {text_secondary}; font-size: 11px;")
         toolbar.addWidget(self._count_label)
 
         layout.addLayout(toolbar)
@@ -102,21 +104,23 @@ class EventMonitor(BaseWidget):
         data_preview = str(event.data)[:80] if event.data else "{}"
 
         # 根据事件类型着色
-        color = "#cccccc"
+        color = theme_manager.get_color("text_primary")
         if "error" in event.type.lower():
-            color = "#f44747"
+            color = theme_manager.get_color("error")
         elif "stream" in event.type.lower():
-            color = "#4ec9b0"
+            color = theme_manager.get_color("success")
         elif "turn" in event.type.lower():
-            color = "#569cd6"
+            color = theme_manager.get_color("info")
         elif "command" in event.type.lower():
-            color = "#dcdcaa"
+            color = theme_manager.get_color("warning")
 
+        text_secondary = theme_manager.get_color("text_secondary")
+        text_disabled = theme_manager.get_color("border")  # 使用边框色作为替代
         self._output.append(
-            f'<span style="color: #858585;">[{timestamp}]</span> '
+            f'<span style="color: {text_secondary};">[{timestamp}]</span> '
             f'<span style="color: {color};">{event.type}</span> '
-            f'<span style="color: #6e6e6e;">← {source}</span> '
-            f'<span style="color: #858585;">{data_preview}</span>'
+            f'<span style="color: {text_disabled};">← {source}</span> '
+            f'<span style="color: {text_secondary};">{data_preview}</span>'
         )
 
         self._count_label.setText(f"事件: {self._event_count}")

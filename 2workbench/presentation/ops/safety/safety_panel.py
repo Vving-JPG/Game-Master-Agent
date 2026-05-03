@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from foundation.logger import get_logger
+from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
 
@@ -254,17 +255,20 @@ class SafetyPanel(BaseWidget):
         """实时验证正则表达式"""
         if not text:
             self._pattern_status.setText("○")
-            self._pattern_status.setStyleSheet("color: #858585;")
+            text_secondary = theme_manager.get_color("text_secondary")
+            self._pattern_status.setStyleSheet(f"color: {text_secondary};")
             self._pattern_status.setToolTip("请输入正则表达式")
             return
         try:
             re.compile(text)
             self._pattern_status.setText("✓")
-            self._pattern_status.setStyleSheet("color: #4caf50; font-weight: bold;")
+            success_color = theme_manager.get_color("success")
+            self._pattern_status.setStyleSheet(f"color: {success_color}; font-weight: bold;")
             self._pattern_status.setToolTip("正则表达式有效")
         except re.error as e:
             self._pattern_status.setText("✗")
-            self._pattern_status.setStyleSheet("color: #f44336; font-weight: bold;")
+            error_color = theme_manager.get_color("error")
+            self._pattern_status.setStyleSheet(f"color: {error_color}; font-weight: bold;")
             self._pattern_status.setToolTip(f"正则表达式错误: {e}")
 
     def _validate_pattern(self) -> None:

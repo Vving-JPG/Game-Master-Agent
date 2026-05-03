@@ -28,6 +28,7 @@ from foundation.event_bus import event_bus, Event
 from foundation.llm import LLMMessage
 from foundation.llm.model_router import model_router
 from foundation.logger import get_logger
+from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
 
@@ -88,7 +89,8 @@ class EvalCaseEditor(QWidget):
 
         toolbar.addStretch()
         self._count_label = QLabel("用例: 0")
-        self._count_label.setStyleSheet("color: #858585;")
+        text_secondary = theme_manager.get_color("text_secondary")
+        self._count_label.setStyleSheet(f"color: {text_secondary};")
         toolbar.addWidget(self._count_label)
 
         layout.addLayout(toolbar)
@@ -253,6 +255,10 @@ class EvalWorkbench(BaseWidget):
         self._btn_compare.clicked.connect(self._show_comparison)
         model_bar.addWidget(self._btn_compare)
 
+        self._btn_export = StyledButton("📤 导出报告", style_type="secondary")
+        self._btn_export.clicked.connect(self._export_report)
+        model_bar.addWidget(self._btn_export)
+
         model_bar.addStretch()
 
         self._progress = QProgressBar()
@@ -377,3 +383,51 @@ class EvalWorkbench(BaseWidget):
         layout.addWidget(comparison)
 
         dialog.exec()
+
+    def _export_report(self) -> None:
+        """导出评估报告"""
+        from PyQt6.QtWidgets import QMessageBox
+        path, _ = QFileDialog.getSaveFileName(self, "导出报告", "eval_report.json", "JSON (*.json)")
+        if not path:
+            return
+
+        try:
+            import json
+            from datetime import datetime
+
+            # 收集所有用例和结果
+            cases = self._case_editor.get_cases()
+            report = {
+                "timestamp": datetime.now().isoformat(),
+                "total_cases": len(cases),
+                "results": [
+                    {
+                        "model": result.model,
+                        "avg_score": result.avg_score,
+                        "pass_rate": result.pass_rate,
+                        "avg_latency_ms": result.avg_latency_ms,
+                        "total_tokens": result.total_tokens,
+                    }
+                    for result in self._results
+                ],
+                "cases": [
+                    {
+                        "id": case.id,
+                        "input": case.input_text,
+                        "expected": case.expected_output,
+                        "actual": case.actual_output,
+                        "score": case.score,
+                        "latency_ms": case.latency_ms,
+                        "tokens_used": case.tokens_used,
+                    }
+                    for case in cases
+                ]
+            }
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(report, f, ensure_ascii=False, indent=2)
+
+            QMessageBox.information(self, "导出成功", f"报告已保存到:\n{path}")
+            logger.info(f"评估报告已导出: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", str(e))
+            logger.error(f"导出报告失败: {e}")
