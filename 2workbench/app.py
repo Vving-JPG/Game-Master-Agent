@@ -42,6 +42,7 @@ def main() -> None:
     selector = ProjectSelector()
     selected_project = None
     create_new = False
+    user_cancelled = False
     
     def on_project_selected(path: str):
         nonlocal selected_project
@@ -51,12 +52,22 @@ def main() -> None:
         nonlocal create_new
         create_new = True
         
+    def on_rejected():
+        nonlocal user_cancelled
+        user_cancelled = True
+        
     selector.project_selected.connect(on_project_selected)
     selector.new_project_requested.connect(on_new_project)
+    selector.rejected.connect(on_rejected)
     
     # 循环显示项目选择器，直到用户选择项目或创建新项目
     while True:
         selector.exec()
+        
+        # 检查用户是否点击了 X 按钮关闭对话框
+        if user_cancelled:
+            # 用户取消，退出程序
+            return
         
         # 4. 处理项目选择结果
         if create_new:
@@ -65,6 +76,7 @@ def main() -> None:
             if dialog.exec() != NewProjectDialog.DialogCode.Accepted:
                 # 用户取消新建，回到项目选择器
                 create_new = False
+                user_cancelled = False
                 continue
                 
             project_data = dialog.get_project_data()
@@ -76,6 +88,7 @@ def main() -> None:
                 QMessageBox.warning(None, "警告", "项目名称不能为空")
                 # 回到项目选择器
                 create_new = False
+                user_cancelled = False
                 continue
             
             try:
@@ -90,6 +103,7 @@ def main() -> None:
                 QMessageBox.critical(None, "创建失败", f"创建项目失败: {e}")
                 # 回到项目选择器
                 create_new = False
+                user_cancelled = False
                 continue
         elif selected_project:
             # 用户选择了已有项目，跳出循环

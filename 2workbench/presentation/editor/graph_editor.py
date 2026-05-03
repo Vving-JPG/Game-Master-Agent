@@ -229,21 +229,30 @@ class GraphNodeItem(QGraphicsRectItem):
 class GraphEdgeItem(QGraphicsPathItem):
     """图边 — 连接两个节点的曲线"""
 
-    def __init__(self, source: GraphNodeItem, target: GraphNodeItem):
+    def __init__(self, source: GraphNodeItem, target: GraphNodeItem, condition: str = ""):
         super().__init__()
         self.source = source
         self.target = target
+        self.condition = condition  # 新增
         self.setPen(QPen(QColor("#858585"), 2))
         self.setZValue(0)
         self.update_path()
+        self._update_style()  # 新增
+
+    def _update_style(self) -> None:
+        """根据是否有条件更新样式"""
+        if self.condition:
+            # 条件边: 红色虚线
+            pen = QPen(QColor("#f44747"), 2, Qt.PenStyle.DashLine)
+            self.setPen(pen)
+        else:
+            # 普通边: 灰色实线
+            self.setPen(QPen(QColor("#858585"), 2))
 
     def update_path(self) -> None:
         """更新连线路径"""
-        # 使用连接点位置
         start = self.source.get_output_pos()
         end = self.target.get_input_pos()
-
-        # 贝塞尔曲线
         path = QPainterPath()
         path.moveTo(start)
         ctrl_offset = abs(end.x() - start.x()) * 0.5
@@ -254,12 +263,27 @@ class GraphEdgeItem(QGraphicsPathItem):
         )
         self.setPath(path)
 
+        # 如果是条件边，在中间绘制条件标签
+        if self.condition:
+            # 清除旧标签
+            for child in self.childItems():
+                if isinstance(child, QGraphicsTextItem):
+                    self.scene().removeItem(child) if self.scene() else None
+            mid = path.pointAtPercent(0.5)
+            label = QGraphicsTextItem(self.condition, self)
+            label.setDefaultTextColor(QColor("#f44747"))
+            label.setFont(QFont("Microsoft YaHei", 8))
+            label.setPos(mid.x() - 30, mid.y() - 15)
+
     def to_dict(self) -> dict:
         """序列化为字典"""
-        return {
+        result = {
             "from": self.source.node_id,
             "to": self.target.node_id,
         }
+        if self.condition:
+            result["condition"] = self.condition
+        return result
 
 
 class GraphScene(QGraphicsScene):
@@ -280,13 +304,13 @@ class GraphScene(QGraphicsScene):
         self._nodes[node_id] = node
         return node
 
-    def add_edge(self, source_id: str, target_id: str) -> GraphEdgeItem | None:
+    def add_edge(self, source_id: str, target_id: str, condition: str = "") -> GraphEdgeItem | None:
         """添加边"""
         source = self._nodes.get(source_id)
         target = self._nodes.get(target_id)
         if not source or not target:
             return None
-        edge = GraphEdgeItem(source, target)
+        edge = GraphEdgeItem(source, target, condition=condition)
         self.addItem(edge)
         self._edges.append(edge)
         return edge
@@ -330,9 +354,13 @@ class GraphScene(QGraphicsScene):
                 position=node_data.get("position"),
             )
 
-        # 添加边
+        # 添加边（包含 condition）
         for edge_data in graph_data.get("edges", []):
-            self.add_edge(edge_data["from"], edge_data["to"])
+            self.add_edge(
+                edge_data["from"],
+                edge_data["to"],
+                condition=edge_data.get("condition", ""),
+            )
 
     def to_dict(self) -> dict:
         """导出为字典"""
@@ -456,6 +484,21 @@ class GraphEditorWidget(QWidget):
         self._view = GraphEditorView(self._scene)
         layout.addWidget(self._view)
 
+        # 运行时高亮订阅
+        from foundation.event_bus import event_bus
+        event_bus.subscribe("feature.ai.node.started", self._on_node_started)
+        event_bus.subscribe("feature.ai.node.completed", self._on_node_completed)
+
+    def _on_node_started(self, event) -> None:
+        """节点开始执行时高亮"""
+        node_id = event.get("node_id", "")
+        if node_id and node_id in self._scene._nodes:
+            self._scene.set_running_node(node_id)
+
+    def _on_node_completed(self, event) -> None:
+        """节点执行完成时取消高亮"""
+        self._scene.set_running_node(None)
+
     def load_graph(self, graph_data: dict) -> None:
         """加载图定义"""
         self._scene.load_graph(graph_data)
@@ -492,15 +535,35 @@ class GraphEditorWidget(QWidget):
             )
 
     def _save_graph(self) -> None:
-        """保存图到项目"""
+        """保存图定义到 graph.json 并触发编译"""
         from presentation.project.manager import project_manager
         from PyQt6.QtWidgets import QMessageBox
 
         graph_data = self.get_graph()
 
+        # 保存到文件
         try:
             project_manager.save_graph(graph_data)
-            QMessageBox.information(self, "保存成功", "图已保存到项目")
-        except Exception as e:
-            logger.error(f"保存图失败: {e}")
+            logger.info(f"图定义已保存 ({len(graph_data['nodes'])} 节点, {len(graph_data['edges'])} 边)")
+        except RuntimeError as e:
+            logger.error(f"保存失败: {e}")
             QMessageBox.critical(self, "保存失败", f"保存图时出错: {e}")
+            return
+
+        # 触发编译
+        try:
+            from feature.ai.graph_compiler import graph_compiler
+            compiled = graph_compiler.compile(graph_data)
+
+            # 通过 EventBus 通知，让持有 GMAgent 的组件更新
+            from foundation.event_bus import event_bus, Event
+            event_bus.emit(Event(type="ui.graph.compiled", data={
+                "graph_data": graph_data,
+                "node_count": len(graph_data["nodes"]),
+                "edge_count": len(graph_data["edges"]),
+            }))
+            logger.info("图编译成功，已通过 EventBus 通知")
+            QMessageBox.information(self, "保存成功", f"图已保存并编译 ({len(graph_data['nodes'])} 节点)")
+        except Exception as e:
+            logger.error(f"图编译失败: {e}")
+            QMessageBox.warning(self, "编译警告", f"图已保存但编译失败: {e}")

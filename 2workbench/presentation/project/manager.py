@@ -88,11 +88,15 @@ PROJECT_TEMPLATES = {
                 {"id": "update_memory", "type": "memory", "label": "记忆更新", "position": {"x": 900, "y": 200}},
             ],
             "edges": [
+                {"from": "__start__", "to": "handle_event"},
                 {"from": "handle_event", "to": "build_prompt"},
                 {"from": "build_prompt", "to": "llm_reasoning"},
-                {"from": "llm_reasoning", "to": "parse_output"},
-                {"from": "parse_output", "to": "execute_commands"},
+                {"from": "llm_reasoning", "to": "parse_output", "condition": "route_after_llm"},
+                {"from": "llm_reasoning", "to": "execute_commands"},
+                {"from": "parse_output", "to": "execute_commands", "condition": "route_after_parse"},
+                {"from": "parse_output", "to": "update_memory"},
                 {"from": "execute_commands", "to": "update_memory"},
+                {"from": "update_memory", "to": "__end__"},
             ],
         },
         "prompts": {
@@ -327,6 +331,28 @@ class ProjectManager:
             json.dumps(graph_data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+
+    def compile_graph(self) -> Any:
+        """编译当前项目的 graph.json 为 StateGraph
+
+        Returns:
+            编译好的 CompiledGraph
+
+        Raises:
+            RuntimeError: 没有打开的项目
+            ValueError: graph.json 无效
+        """
+        if not self._project_path:
+            raise RuntimeError("没有打开的项目")
+
+        graph_data = self.load_graph()
+        if not graph_data:
+            raise ValueError("graph.json 为空或不存在")
+
+        from feature.ai.graph_compiler import graph_compiler
+        compiled = graph_compiler.compile(graph_data)
+        logger.info(f"项目图编译成功: {self._current_project.name}")
+        return compiled
 
     def load_prompt(self, name: str) -> str:
         """加载 Prompt 模板"""

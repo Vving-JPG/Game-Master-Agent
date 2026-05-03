@@ -28,7 +28,8 @@ _world_repo = WorldRepo()
 _player_repo = PlayerRepo()
 _npc_repo = NPCRepo()
 
-from .graph import gm_graph
+# 默认硬编码图（回退用）
+from .graph import gm_graph as _default_gm_graph
 from .events import (
     create_turn_start_event, create_turn_end_event, create_error_event,
     TURN_START, TURN_END, AGENT_ERROR,
@@ -57,8 +58,23 @@ class GMAgent:
         self._execution_state = "idle"
         self._last_result: dict[str, Any] = {}
 
+        # 图实例（优先使用 graph.json 编译的图）
+        self._graph = _default_gm_graph
+        self._graph_source = "default"  # default / json
+
         # 加载游戏状态
         self._initial_state = self._load_initial_state()
+
+    def set_graph(self, compiled_graph: Any, source: str = "json") -> None:
+        """设置 Agent 使用的图实例
+
+        Args:
+            compiled_graph: 编译好的 StateGraph
+            source: 图来源标识（"json" 或 "default"）
+        """
+        self._graph = compiled_graph
+        self._graph_source = source
+        logger.info(f"Agent 图已更新: source={source}")
 
     def _load_initial_state(self) -> AgentState:
         """从数据库加载初始状态"""
@@ -142,7 +158,7 @@ class GMAgent:
             }
 
             # 执行图
-            result = await gm_graph.ainvoke(input_state)
+            result = await self._graph.ainvoke(input_state)
 
             # 提取结果
             llm_response = result.get("llm_response", {})
@@ -216,6 +232,7 @@ class GMAgent:
             "world_id": self._world_id,
             "turn_count": self._initial_state.get("turn_count", 0),
             "execution_state": self._execution_state,
+            "graph_source": self._graph_source,
             "player": self._initial_state.get("player", {}),
             "location": self._initial_state.get("current_location", {}),
             "npcs": self._initial_state.get("active_npcs", []),

@@ -1,6 +1,7 @@
 # 2workbench/feature/ai/__init__.py
 """AI 编排层 — LangGraph Agent 核心"""
 from feature.ai.graph import gm_graph, build_gm_graph
+from feature.ai.graph_compiler import graph_compiler
 from feature.ai.gm_agent import GMAgent
 from feature.ai.nodes import (
     node_handle_event, node_build_prompt, node_llm_reasoning,
@@ -18,7 +19,7 @@ from feature.ai.events import (
 )
 
 __all__ = [
-    "gm_graph", "build_gm_graph", "GMAgent",
+    "gm_graph", "build_gm_graph", "graph_compiler", "GMAgent",
     "parse_llm_output", "PromptBuilder", "SkillLoader",
     "ALL_TOOLS", "get_tools_schema",
 ]
