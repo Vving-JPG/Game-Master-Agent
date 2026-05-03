@@ -334,6 +334,11 @@ class QuestRepo(BaseRepository):
             rows = db.execute("SELECT * FROM quests WHERE player_id = ?", (player_id,)).fetchall()
             return [self._row_to_quest(r) for r in rows]
 
+    def list_all(self, db_path: str | None = None) -> list[Quest]:
+        with get_db(db_path) as db:
+            rows = db.execute("SELECT * FROM quests ORDER BY created_at DESC").fetchall()
+            return [self._row_to_quest(r) for r in rows]
+
     def update_status(self, quest_id: int, status: str, db_path: str | None = None) -> bool:
         if status not in ("active", "completed", "failed", "not_started"):
             return False

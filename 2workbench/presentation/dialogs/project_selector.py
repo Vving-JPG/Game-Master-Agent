@@ -357,6 +357,8 @@ class ProjectSelector(QDialog):
         bg_primary = p.get("bg_primary", "#1e1e1e")
         bg_secondary = p.get("bg_secondary", "#252526")
         bg_tertiary = p.get("bg_tertiary", "#2d2d30")
+        bg_darker = p.get("bg_darker", "#151515")
+        bg_darkest = p.get("bg_darkest", "#181818")
         bg_hover = p.get("bg_hover", "#3e3e42")
         accent = p.get("accent", "#007acc")
         accent_hover = p.get("accent_hover", "#1c97ea")
@@ -373,7 +375,7 @@ class ProjectSelector(QDialog):
 
             /* Header */
             QFrame#header {{
-                background-color: #151515;
+                background-color: {bg_darker};
                 border-bottom: 1px solid {border};
             }}
             QLabel#titleLabel {{
@@ -526,7 +528,7 @@ class ProjectSelector(QDialog):
 
             /* Footer */
             QFrame#footer {{
-                background-color: #181818;
+                background-color: {bg_darkest};
                 border-top: 1px solid {border};
             }}
             QLabel#versionLabel {{

@@ -30,7 +30,7 @@ def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description="Game Master Agent IDE")
     parser.add_argument("--project", "-p", help="直接打开指定项目路径")
-    parser.add_argument("--version", "-v", action="version", version="2.0.0")
+    parser.add_argument("--version", "-v", action="version", version="GMA IDE v2.0.0")
     parser.add_argument("--no-gui", action="store_true", help="无头模式（仅测试）")
     parser.add_argument("--theme", "-t", choices=["dark", "light"], default="dark", help="主题模式 (默认: dark)")
     parser.add_argument("--port", type=int, default=18080, help="HTTP 服务器端口 (默认: 18080)")

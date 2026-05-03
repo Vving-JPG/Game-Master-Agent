@@ -30,6 +30,8 @@ class ThemeManager:
             "bg_primary": "#1e1e1e",
             "bg_secondary": "#252526",
             "bg_tertiary": "#2d2d30",
+            "bg_darker": "#151515",      # Header 背景
+            "bg_darkest": "#181818",     # Footer 背景
             "bg_hover": "#3e3e42",
             "bg_active": "#094771",
             "text_primary": "#cccccc",
@@ -44,11 +46,15 @@ class ThemeManager:
             "info": "#569cd6",
             "scrollbar": "#424242",
             "scrollbar_hover": "#4f4f4f",
+            "font_family": '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+            "mono_font": '"Cascadia Code", "Consolas", "Monaco", "Courier New", monospace',
         },
         "light": {
             "bg_primary": "#ffffff",
             "bg_secondary": "#f3f3f3",
             "bg_tertiary": "#e8e8e8",
+            "bg_darker": "#e8e8e8",      # Header 背景
+            "bg_darkest": "#f0f0f0",     # Footer 背景
             "bg_hover": "#e8e8e8",
             "bg_active": "#0060c0",
             "text_primary": "#333333",
@@ -63,6 +69,8 @@ class ThemeManager:
             "info": "#1976d2",
             "scrollbar": "#c1c1c1",
             "scrollbar_hover": "#a8a8a8",
+            "font_family": '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+            "mono_font": '"Cascadia Code", "Consolas", "Monaco", "Courier New", monospace',
         },
     }
 

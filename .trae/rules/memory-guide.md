@@ -79,6 +79,14 @@
 | `记忆/opt_p3_ops_features.md` | **P3** | Ops 面板功能补全 | ✅ |
 | `记忆/opt_p4_advanced.md` | **P4** | 进阶功能补全 | ✅ |
 
+#### 优化步骤 P1-P3（2026-05-03 新增）
+
+| 文件 | 阶段 | 说明 | 状态 |
+|------|------|------|------|
+| `记忆/opt_p1_datafix.md` | **P1** | 数据 Bug 修复（导入导出、CORS） | ✅ |
+| `记忆/opt_p2_hardcode_cleanup.md` | **P2** | 硬编码清理（颜色、字体、计数器） | ✅ |
+| `记忆/opt_p3_advanced_features.md` | **P3** | 进阶功能（服务启停、保存、Agent完善） | ✅ |
+
 #### Agent 运行流程优化（2026-05-03）
 
 | 文件 | 阶段 | 说明 | 状态 |
@@ -86,6 +94,14 @@
 | `记忆/p1_agent_fix.md` | **P1** | 打通 Agent 运行流程 | ✅ |
 | `记忆/p2_editor_fix.md` | **P2** | 编辑器体验修复 | ✅ |
 | `记忆/p3_tool_feature_fix.md` | **P3** | 工具与 Feature 打通 | ✅ |
+
+#### 近期任务完成（2026-05-03）
+
+| 文件 | 阶段 | 说明 | 状态 |
+|------|------|------|------|
+| `记忆/p1_tool_integration.md` | **P1** | 工具系统全量接入 | ✅ |
+| `记忆/p2_debugger_integration.md` | **P2** | 调试面板与运行体验打通 | ✅ |
+| `记忆/p3_code_quality.md` | **P3** | 代码质量与工程规范 | ✅ |
 
 ### 完整阶段记忆文件（归档参考）
 
@@ -176,6 +192,9 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
 | 工具连接DB, update_player_stat, give_item | `记忆/p3_tool_feature_fix.md` |
 | 工具真实调用, _run_test, invoke | `记忆/p3_tool_feature_fix.md` |
 | Feature事件订阅, on_enable, _on_command_executed | `记忆/p3_tool_feature_fix.md` |
+| 工具系统接入, remove_item, update_npc_relationship | `记忆/p1_tool_integration.md` |
+| 调试面板打通, _on_debugger_run, ui.debugger.run | `记忆/p2_debugger_integration.md` |
+| 代码质量, ruff, mypy, pyproject.toml | `记忆/p3_code_quality.md` |
 
 #### 优化阶段触发规则
 
@@ -221,6 +240,20 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
 | HTTP认证, _AUTH_TOKEN, X-Auth-Token | `记忆/opt_p4_advanced.md` |
 | 跨平台截图, _capture_with_qt, screenshot | `记忆/opt_p4_advanced.md` |
 | 命令行参数, argparse, --project | `记忆/opt_p4_advanced.md` |
+
+#### 优化步骤 P1-P3 触发规则（2026-05-03 新增）
+
+| 触发关键词 | 加载文件 |
+|-----------|----------|
+| BUG-019, knowledge_editor, 导入导出 | `记忆/opt_p1_datafix.md` |
+| BUG-020, server, CORS, X-Auth-Token | `记忆/opt_p1_datafix.md` |
+| items, quests, 知识库导入导出 | `记忆/opt_p1_datafix.md` |
+| 硬编码颜色, bg_darker, bg_darkest | `记忆/opt_p2_hardcode_cleanup.md` |
+| 类变量计数器, _node_counter, GraphEditorWidget | `记忆/opt_p2_hardcode_cleanup.md` |
+| font_family, mono_font, 字体统一 | `记忆/opt_p2_hardcode_cleanup.md` |
+| 部署服务, _start_service, _stop_service | `记忆/opt_p3_advanced_features.md` |
+| 文件保存, Ctrl+S, _save_editor_widget | `记忆/opt_p3_advanced_features.md` |
+| Agent运行完善, 空图检查, _run_action | `记忆/opt_p3_advanced_features.md` |
 
 ### 模块级触发规则（加载细粒度文件组）
 
@@ -312,9 +345,24 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
 | `runtime_panel.py` (输入历史) | `opt_p3_ops_features.md` |
 | `eval_workbench.py` (报告导出) | `opt_p3_ops_features.md` |
 | `deploy_manager.py` (ZIP打包) | `opt_p3_ops_features.md` |
-| `main_window.py` (文件保存、撤销重做) | `opt_p4_advanced.md` |
-| `server.py` (HTTP认证、跨平台截图) | `opt_p4_advanced.md` |
-| `app.py` (命令行参数) | `opt_p4_advanced.md` |
+| `main_window.py` (文件保存、撤销重做) | `记忆/opt_p4_advanced.md` |
+| `server.py` (HTTP认证、跨平台截图) | `记忆/opt_p4_advanced.md` |
+| `app.py` (命令行参数) | `记忆/opt_p4_advanced.md` |
+
+#### 优化步骤 P1-P3 执行规则（2026-05-03 新增）
+
+| 修改文件 | 加载细粒度记忆 |
+|----------|---------------|
+| `knowledge_editor.py` (导入导出修复) | `记忆/opt_p1_datafix.md` |
+| `server.py` (CORS修复) | `记忆/opt_p1_datafix.md` |
+| `theme/manager.py` (新增颜色/字体变量) | `记忆/opt_p2_hardcode_cleanup.md` |
+| `project_selector.py` (Header/Footer颜色) | `记忆/opt_p2_hardcode_cleanup.md` |
+| `graph_editor.py` (节点颜色/字体/计数器) | `记忆/opt_p2_hardcode_cleanup.md` |
+| `main_window.py` (编辑器字体) | `记忆/opt_p2_hardcode_cleanup.md` |
+| `deploy_manager.py` (服务启停实现) | `记忆/opt_p3_advanced_features.md` |
+| `main_window.py` (Ctrl+S保存) | `记忆/opt_p3_advanced_features.md` |
+| `main_window.py` (Agent运行完善) | `记忆/opt_p3_advanced_features.md` |
+| `app.py` (版本号格式) | `记忆/opt_p3_advanced_features.md` |
 
 ### 按开发任务触发
 
@@ -346,6 +394,12 @@ PyQt6 WorkBench:                 workbench_w1w4 → workbench_w5w7
    - Agent运行流程P1 → 加载 p1_agent_fix.md
    - 编辑器体验P2 → 加载 p2_editor_fix.md
    - 工具Feature打通P3 → 加载 p3_tool_feature_fix.md
+   - 工具系统接入P1 → 加载 p1_tool_integration.md
+   - 调试面板打通P2 → 加载 p2_debugger_integration.md
+   - 代码质量规范P3 → 加载 p3_code_quality.md
+   - 数据Bug修复P1 → 加载 opt_p1_datafix.md
+   - 硬编码清理P2 → 加载 opt_p2_hardcode_cleanup.md
+   - 进阶功能P3 → 加载 opt_p3_advanced_features.md
 ```
 
 ---
@@ -379,6 +433,9 @@ d:\Game-Master-Agent\
     ├── opt_p1_*.md          # P1 回归 Bug 修复优化
     ├── opt_p2_*.md          # P2 代码质量优化
     ├── opt_p3_*.md          # P3 交互与快捷键优化
+    ├── opt_p1_datafix.md    # P1 数据 Bug 修复（导入导出、CORS）
+    ├── opt_p2_hardcode_cleanup.md # P2 硬编码清理（颜色、字体、计数器）
+    ├── opt_p3_advanced_features.md # P3 进阶功能（服务启停、保存、Agent完善）
     ├── p1_agent_fix.md      # P1 Agent运行流程修复
     ├── p2_editor_fix.md     # P2 编辑器体验修复
     ├── p3_tool_feature_fix.md # P3 工具与Feature打通
@@ -389,6 +446,6 @@ d:\Game-Master-Agent\
 ---
 
 *最后更新: 2026-05-03*
-*当前阶段: **细粒度记忆重构完成 + 优化阶段文档完成** ✅*
+*当前阶段: **细粒度记忆重构完成 + 优化阶段文档完成 + 优化步骤P1-P3文档完成** ✅*
 *架构状态: 四层重构完成 (P0 ✅, P1 ✅, P2 ✅, P3 ✅, P4 ✅, P5 ✅, P6 ✅, P7 ✅)，已弃用 Vue3，全面转向 PyQt6*
-*记忆文件: 31个细粒度文件 + 11个归档文件*
+*记忆文件: 34个细粒度文件 + 11个归档文件*

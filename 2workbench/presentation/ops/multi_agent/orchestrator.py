@@ -241,6 +241,7 @@ class MultiAgentOrchestrator(BaseWidget):
     def _validate_chain(self) -> list[str]:
         """验证链的完整性，返回错误列表"""
         errors = []
+        reported_cycles = set()  # 记录已报告的环，避免重复
         agent_ids = {a.id for a in self._agents}
 
         # 检查孤立 Agent（没有连接的）
@@ -269,7 +270,10 @@ class MultiAgentOrchestrator(BaseWidget):
         def dfs(node, path):
             if node in path:
                 cycle = path[path.index(node):] + [node]
-                errors.append(f"检测到循环: {' → '.join(cycle)}")
+                cycle_key = tuple(sorted(cycle))
+                if cycle_key not in reported_cycles:
+                    reported_cycles.add(cycle_key)
+                    errors.append(f"检测到循环: {' → '.join(cycle)}")
                 return
             if node in visited:
                 return

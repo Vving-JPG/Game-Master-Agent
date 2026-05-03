@@ -826,13 +826,13 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        run_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay), "运行", self)
-        run_action.triggered.connect(self._on_run_agent)
-        toolbar.addAction(run_action)
+        self._run_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay), "运行", self)
+        self._run_action.triggered.connect(self._on_run_agent)
+        toolbar.addAction(self._run_action)
 
-        stop_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop), "停止", self)
-        stop_action.triggered.connect(self._on_stop_agent)
-        toolbar.addAction(stop_action)
+        self._stop_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop), "停止", self)
+        self._stop_action.triggered.connect(self._on_stop_agent)
+        toolbar.addAction(self._stop_action)
 
         toolbar.addSeparator()
 
@@ -882,6 +882,8 @@ class MainWindow(QMainWindow):
         event_bus.subscribe("feature.ai.turn_end", self._on_turn_end)
         event_bus.subscribe("feature.ai.agent_error", self._on_agent_error)
         event_bus.subscribe("feature.ai.llm_stream_token", self._on_stream_token)
+        # 调试面板事件
+        self._setup_debugger_connections()
 
     # --- EventBus 回调 ---
 
@@ -906,6 +908,44 @@ class MainWindow(QMainWindow):
         token = event.get("token", "")
         # 流式 token 更新（后续 Step 在控制台面板显示）
         pass
+
+    def _setup_debugger_connections(self) -> None:
+        """连接调试面板到 Agent"""
+        event_bus.subscribe("ui.debugger.run", self._on_debugger_run)
+        event_bus.subscribe("ui.debugger.stop", self._on_debugger_stop)
+        event_bus.subscribe("ui.debugger.input", self._on_debugger_input)
+        event_bus.subscribe("ui.debugger.request_state", self._on_request_state)
+
+    def _on_debugger_run(self, event: Event) -> None:
+        """调试面板触发运行"""
+        self._on_run_agent()
+
+    def _on_debugger_stop(self, event: Event) -> None:
+        """调试面板触发停止"""
+        self._on_stop_agent()
+
+    def _on_debugger_input(self, event: Event) -> None:
+        """调试面板发送用户输入"""
+        text = event.get("text", "")
+        if not text:
+            return
+        # 如果有正在运行的 Agent，发送输入
+        if hasattr(self, '_current_agent') and self._current_agent:
+            # 通过 EventBus 发送输入事件
+            event_bus.emit("feature.ai.user_input", {"text": text})
+
+    def _on_request_state(self, event: Event) -> None:
+        """响应调试面板的状态请求"""
+        if not hasattr(self, '_current_agent') or not self._current_agent:
+            return
+        try:
+            if hasattr(self._current_agent, 'get_state_snapshot'):
+                snapshot = self._current_agent.get_state_snapshot()
+                event_bus.emit("ui.debugger.state_update", {"state": snapshot})
+            else:
+                logger.warning("当前 Agent 不支持 get_state_snapshot 方法")
+        except Exception as e:
+            logger.error(f"获取 Agent 状态失败: {e}")
 
     def _on_undo(self) -> None:
         """撤销操作"""
@@ -1099,12 +1139,19 @@ class MainWindow(QMainWindow):
             editor._is_modified = (current != editor._original_content)
             if editor._is_modified != was_modified:
                 self._update_tab_title(editor, path.name, editor._is_modified)
-        
+
         editor.textChanged.connect(on_text_changed)
-        
+
+        # 绑定 Ctrl+S 保存快捷键
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        save_shortcut = QShortcut(QKeySequence.StandardKey.Save, editor)
+        save_shortcut.activated.connect(lambda: self._save_editor_widget(editor))
+
         # 只保留字体设置，颜色由全局 QSS 控制
-        editor.setStyleSheet("font-family: 'Cascadia Code', 'Consolas', 'Monaco', 'Courier New', monospace;")
-        
+        p = theme_manager.PALETTES.get(theme_manager.current_theme, {})
+        mono_font = p.get("mono_font", "'Cascadia Code', 'Consolas', 'Monaco', 'Courier New', monospace")
+        editor.setStyleSheet(f"font-family: {mono_font};")
+
         # 添加到标签页
         tab_name = f"📄 {path.name}"
         index = self.center_panel.tab_widget.addTab(editor, tab_name)
@@ -1196,6 +1243,16 @@ class MainWindow(QMainWindow):
             self._show_message("请先打开一个项目")
             return
 
+        # 检查图是否有效
+        try:
+            graph = project_manager.load_graph()
+            nodes = graph.get("nodes", [])
+            if not nodes:
+                QMessageBox.warning(self, "无法运行", "当前项目没有定义任何节点，请先在图编辑器中添加节点。")
+                return
+        except Exception as e:
+            logger.warning(f"加载图检查失败: {e}")
+
         if not settings.deepseek_api_key:
             QMessageBox.warning(self, "配置缺失",
                 "请先在 设置 > API设置 中配置 API Key")
@@ -1211,8 +1268,12 @@ class MainWindow(QMainWindow):
         if not ok or not user_input:
             return
 
-        # 创建 Agent 实例并运行
+        # 禁用运行按钮，启用停止按钮
+        self._run_action.setEnabled(False)
+        self._stop_action.setEnabled(True)
         self._show_message("Agent 运行中...")
+
+        # 创建 Agent 实例并运行
         self._current_agent = GMAgent(world_id=1)
 
         # === 使用项目编译的图 ===
@@ -1222,20 +1283,20 @@ class MainWindow(QMainWindow):
             logger.info("使用项目编译的图运行 Agent")
         except Exception as e:
             logger.warning(f"项目图编译失败，使用默认图: {e}")
-        
+
         # 在后台线程中运行 Agent
         import asyncio
         from PyQt6.QtCore import QThread, pyqtSignal
-        
+
         class AgentThread(QThread):
             finished = pyqtSignal(dict)
             error = pyqtSignal(str)
-            
+
             def __init__(self, agent, user_input):
                 super().__init__()
                 self.agent = agent
                 self.user_input = user_input
-            
+
             def run(self):
                 try:
                     # 使用 asyncio 运行异步方法
@@ -1248,7 +1309,7 @@ class MainWindow(QMainWindow):
                     self.finished.emit(result)
                 except Exception as e:
                     self.error.emit(str(e))
-        
+
         self._agent_thread = AgentThread(self._current_agent, user_input)
         self._agent_thread.finished.connect(self._on_agent_finished)
         self._agent_thread.error.connect(self._on_agent_error)
@@ -1256,12 +1317,16 @@ class MainWindow(QMainWindow):
 
     def _on_agent_finished(self, result: dict) -> None:
         """Agent 运行完成回调"""
+        # 恢复按钮状态
+        self._run_action.setEnabled(True)
+        self._stop_action.setEnabled(False)
+
         status = result.get("status", "unknown")
         if status == "success":
             narrative = result.get("narrative", "")
             turn = result.get("turn_count", 0)
             self._show_message(f"Agent 回合 {turn} 完成", 3000)
-            
+
             # 显示叙事结果（简单弹窗）
             QMessageBox.information(
                 self, "Agent 运行结果",
@@ -1275,6 +1340,10 @@ class MainWindow(QMainWindow):
 
     def _on_agent_error(self, error: str) -> None:
         """Agent 运行错误回调"""
+        # 恢复按钮状态
+        self._run_action.setEnabled(True)
+        self._stop_action.setEnabled(False)
+
         self._show_message(f"Agent 运行错误: {error}", 5000)
         QMessageBox.critical(self, "Agent 错误", f"运行失败: {error}")
 

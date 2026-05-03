@@ -392,9 +392,6 @@ class EvalWorkbench(BaseWidget):
             return
 
         try:
-            import json
-            from datetime import datetime
-
             # 收集所有用例和结果
             cases = self._case_editor.get_cases()
             report = {

@@ -745,9 +745,15 @@ class KnowledgeEditor(BaseWidget):
                 self._npc_editor.load_data(data["npcs"])
             if "locations" in data:
                 self._loc_editor.load_data(data["locations"])
+            if "items" in data:
+                self._item_editor.load_data(data["items"])
+            if "quests" in data:
+                self._quest_editor.load_data(data["quests"])
             logger.info(f"知识库导入成功: {path}")
+            QMessageBox.information(self, "导入成功", f"知识库已从 {path} 导入")
         except Exception as e:
             logger.error(f"导入失败: {e}")
+            QMessageBox.critical(self, "导入失败", str(e))
 
     def _export_data(self) -> None:
         """导出 JSON 数据"""
@@ -760,9 +766,13 @@ class KnowledgeEditor(BaseWidget):
             data = {
                 "npcs": self._npc_editor.get_data(),
                 "locations": self._loc_editor.get_data(),
+                "items": self._item_editor.get_data(),
+                "quests": self._quest_editor.get_data(),
             }
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             logger.info(f"知识库导出成功: {path}")
+            QMessageBox.information(self, "导出成功", f"知识库已导出到 {path}")
         except Exception as e:
             logger.error(f"导出失败: {e}")
+            QMessageBox.critical(self, "导出失败", str(e))

@@ -75,12 +75,14 @@ class GraphNodeItem(QGraphicsRectItem):
         y = position.get("y", 0) if position else 0
         self.setPos(x, y)
 
-        # 样式
+        # 样式 - 从主题获取颜色
+        p = theme_manager.PALETTES.get(theme_manager.current_theme, {})
         color_hex, type_label = NODE_COLORS.get(node_type, ("#9cdcfe", "自定义"))
         self._color = QColor(color_hex)
 
         self.setBrush(QBrush(self._color))
-        self.setPen(QPen(QColor("#3e3e42"), 2))
+        border_color = p.get("border", "#3e3e42")
+        self.setPen(QPen(QColor(border_color), 2))
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
@@ -88,8 +90,10 @@ class GraphNodeItem(QGraphicsRectItem):
 
         # 标签文本
         self._label_item = QGraphicsTextItem(self.label, self)
-        self._label_item.setDefaultTextColor(QColor("#ffffff"))
-        font = QFont("Microsoft YaHei", 10, QFont.Weight.Bold) if "Microsoft YaHei" in QFontDatabase.families() else QFont("Segoe UI", 10, QFont.Weight.Bold)
+        text_bright = p.get("text_bright", "#ffffff")
+        self._label_item.setDefaultTextColor(QColor(text_bright))
+        font_family = p.get("font_family", "Microsoft YaHei")
+        font = QFont(font_family.split(",")[0].strip('"'), 10, QFont.Weight.Bold)
         self._label_item.setFont(font)
         # 居中
         text_rect = self._label_item.boundingRect()
@@ -100,8 +104,9 @@ class GraphNodeItem(QGraphicsRectItem):
 
         # 类型标签
         self._type_item = QGraphicsTextItem(type_label, self)
-        self._type_item.setDefaultTextColor(QColor("#cccccc"))
-        type_font = QFont("Microsoft YaHei", 8) if "Microsoft YaHei" in QFontDatabase.families() else QFont("Segoe UI", 8)
+        text_primary = p.get("text_primary", "#cccccc")
+        self._type_item.setDefaultTextColor(QColor(text_primary))
+        type_font = QFont(font_family.split(",")[0].strip('"'), 8)
         self._type_item.setFont(type_font)
         type_rect = self._type_item.boundingRect()
         self._type_item.setPos(
@@ -536,10 +541,9 @@ class NodePropertyDialog(QDialog):
 class GraphEditorWidget(QWidget):
     """图编辑器组件 — 场景 + 视图 + 工具栏"""
 
-    _node_counter = 0  # 类变量，用于自动生成节点 ID
-
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._node_counter = 0  # 实例变量，用于自动生成节点 ID
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -617,13 +621,13 @@ class GraphEditorWidget(QWidget):
     def _add_node_dialog(self) -> None:
         """添加节点对话框"""
         # 自动生成唯一 ID
-        GraphEditorWidget._node_counter += 1
-        node_id = f"node_{GraphEditorWidget._node_counter}"
+        self._node_counter += 1
+        node_id = f"node_{self._node_counter}"
 
         # 检查 ID 是否已存在
         while node_id in self._scene._nodes:
-            GraphEditorWidget._node_counter += 1
-            node_id = f"node_{GraphEditorWidget._node_counter}"
+            self._node_counter += 1
+            node_id = f"node_{self._node_counter}"
 
         dialog = NodePropertyDialog(node_id, "custom", "新节点")
         if dialog.exec():
@@ -639,8 +643,8 @@ class GraphEditorWidget(QWidget):
                 node_id=final_id,
                 node_type=data["type"],
                 label=data["label"],
-                position={"x": 200 + GraphEditorWidget._node_counter * 30,
-                          "y": 200 + GraphEditorWidget._node_counter * 20},
+                position={"x": 200 + self._node_counter * 30,
+                          "y": 200 + self._node_counter * 20},
             )
             logger.info(f"添加节点: {final_id} ({data['type']})")
 

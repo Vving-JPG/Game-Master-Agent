@@ -10,6 +10,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,7 +20,7 @@ from typing import Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QComboBox, QLineEdit, QTextEdit,
-    QGroupBox, QProgressBar, QTabWidget,
+    QGroupBox, QProgressBar, QTabWidget, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 
@@ -34,6 +37,8 @@ class DeployManager(BaseWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._deploy_status = "idle"  # idle / packaging / deploying / running / error
+        self._server_process = None
+        self._server_thread = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -78,7 +83,7 @@ class DeployManager(BaseWidget):
         config_form.addRow("端口:", self._port_spin)
 
         self._host_edit = QLineEdit()
-        self._host_edit.setText("0.0.0.0")
+        self._host_edit.setText("127.0.0.1")
         config_form.addRow("主机:", self._host_edit)
 
         pack_layout.addWidget(config_group)
@@ -192,18 +197,55 @@ class DeployManager(BaseWidget):
             QMessageBox.critical(self, "打包失败", str(e))
 
     def _start_service(self) -> None:
-        """启动服务"""
-        self._deploy_status = "running"
-        self._status_label.setText("🟢 运行中")
-        self._run_status.setText("运行中")
-        self._btn_start.setEnabled(False)
-        self._btn_stop.setEnabled(True)
-        logger.info("服务已启动（模拟）")
+        """启动 HTTP 服务"""
+        port = self._port_spin.value()
+        host = self._host_edit.text() or "127.0.0.1"
+
+        try:
+            # 启动子进程运行 server
+            script_path = Path(__file__).parent.parent.parent / "server_main.py"
+            if not script_path.exists():
+                # 如果没有独立入口，使用内嵌服务器
+                from presentation.server import ThreadedHTTPServer, RequestHandler
+
+                def run_server():
+                    server = ThreadedHTTPServer((host, port), RequestHandler)
+                    logger.info(f"HTTP 服务启动: http://{host}:{port}")
+                    server.serve_forever()
+
+                self._server_thread = threading.Thread(target=run_server, daemon=True)
+                self._server_thread.start()
+            else:
+                self._server_process = subprocess.Popen(
+                    [sys.executable, str(script_path), "--host", host, "--port", str(port)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+
+            self._deploy_status = "running"
+            self._status_label.setText(f"✅ 运行中 — http://{host}:{port}")
+            self._status_label.setStyleSheet("color: #4ec9b0;")
+            self._run_status.setText(f"运行中 — http://{host}:{port}")
+            self._btn_start.setEnabled(False)
+            self._btn_stop.setEnabled(True)
+            logger.info(f"服务已启动: http://{host}:{port}")
+        except Exception as e:
+            logger.error(f"启动服务失败: {e}")
+            QMessageBox.critical(self, "启动失败", str(e))
 
     def _stop_service(self) -> None:
-        """停止服务"""
+        """停止 HTTP 服务"""
+        if self._server_process:
+            self._server_process.terminate()
+            try:
+                self._server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._server_process.kill()
+            self._server_process = None
+
         self._deploy_status = "idle"
-        self._status_label.setText("⚪ 已停止")
+        self._status_label.setText("⏹ 已停止")
+        self._status_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         self._run_status.setText("已停止")
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)

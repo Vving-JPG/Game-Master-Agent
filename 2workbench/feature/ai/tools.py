@@ -212,11 +212,36 @@ def remove_item(item_name: str, quantity: int = 1, player_id: int = 0) -> str:
     Args:
         item_name: 道具名称
         quantity: 数量
+        player_id: 玩家 ID（0 表示使用当前上下文中的玩家）
 
     Returns:
         移除结果描述
     """
-    return f"已从玩家身上移除 {quantity} 个 {item_name}"
+    ctx = get_tool_context()
+    if not ctx:
+        return "错误：工具上下文未初始化"
+
+    try:
+        from core.models.repository import ItemRepo, PlayerRepo
+        item_repo = ctx.get_repo(ItemRepo)
+        player_repo = ctx.get_repo(PlayerRepo)
+
+        pid = player_id if player_id > 0 else ctx.player_id
+
+        # 查找物品
+        items = item_repo.search(name=item_name)
+        if not items:
+            return f"错误：物品 '{item_name}' 不存在"
+
+        item = items[0]
+
+        # 从玩家背包移除
+        player_repo.remove_item(pid, item.id, quantity)
+
+        return f"已从玩家身上移除 {quantity} 个 {item_name}"
+    except Exception as e:
+        logger.error(f"移除物品失败: {e}")
+        return f"错误：{e}"
 
 
 @tool
@@ -264,13 +289,40 @@ def update_npc_relationship(npc_name: str, change: int, player_id: int = 0) -> s
     Args:
         npc_name: NPC 名称
         change: 关系值变化（正数=好感增加，负数=好感降低）
-        player_id: 玩家 ID
+        player_id: 玩家 ID（0 表示使用当前上下文中的玩家）
 
     Returns:
         关系变化描述
     """
-    direction = "增加" if change > 0 else "降低"
-    return f"{npc_name} 对玩家的好感度{direction}了 {abs(change)} 点"
+    ctx = get_tool_context()
+    if not ctx:
+        return "错误：工具上下文未初始化"
+
+    try:
+        from core.models.repository import NPCRepo
+        npc_repo = ctx.get_repo(NPCRepo)
+
+        # 获取世界中的所有 NPC
+        npcs = npc_repo.get_by_world(int(ctx.world_id) if ctx.world_id else 1)
+
+        # 查找匹配的 NPC
+        for npc in npcs:
+            if npc.name == npc_name:
+                # 更新关系值（限制在 -100 到 100 之间）
+                current_rel = npc.relationships.get("player", 0)
+                new_rel = max(-100, min(100, current_rel + change))
+                npc.relationships["player"] = new_rel
+
+                # 保存到数据库
+                npc_repo.update(npc.id, relationships=npc.relationships)
+
+                direction = "增加" if change > 0 else "降低"
+                return f"{npc_name} 对玩家的好感度{direction}了 {abs(change)} 点（当前: {new_rel}）"
+
+        return f"错误：未找到 NPC '{npc_name}'"
+    except Exception as e:
+        logger.error(f"更新 NPC 关系失败: {e}")
+        return f"错误：{e}"
 
 
 @tool
@@ -279,33 +331,89 @@ def update_quest_status(quest_title: str, status: str) -> str:
 
     Args:
         quest_title: 任务标题
-        status: 新状态（active, completed, failed）
+        status: 新状态（active, completed, failed, abandoned）
 
     Returns:
         任务状态更新描述
     """
-    valid = {"active", "completed", "failed"}
+    ctx = get_tool_context()
+    if not ctx:
+        return "错误：工具上下文未初始化"
+
+    valid = {"active", "completed", "failed", "abandoned"}
     if status not in valid:
         return f"无效的任务状态: {status}，可用: {valid}"
-    return f"任务 [{quest_title}] 状态已更新为: {status}"
+
+    try:
+        from core.models.repository import QuestRepo
+        quest_repo = ctx.get_repo(QuestRepo)
+
+        # 获取玩家相关的所有任务
+        quests = quest_repo.get_by_player(ctx.player_id)
+
+        # 查找匹配标题的任务
+        for quest in quests:
+            if quest.title.lower() == quest_title.lower():
+                # 更新任务状态
+                quest_repo.update_status(quest.id, status)
+                return f"任务 [{quest_title}] 状态已更新为: {status}"
+
+        # 如果没有找到匹配的任务，尝试在所有任务中搜索
+        # 这里使用 list_all 作为备选方案
+        all_quests = quest_repo.list_all()
+        for quest in all_quests:
+            if quest.title.lower() == quest_title.lower():
+                quest_repo.update_status(quest.id, status)
+                return f"任务 [{quest_title}] 状态已更新为: {status}"
+
+        return f"错误：未找到任务 '{quest_title}'"
+    except Exception as e:
+        logger.error(f"更新任务状态失败: {e}")
+        return f"错误：{e}"
 
 
 @tool
-def store_memory(content: str, category: str, importance: float = 0.5) -> str:
+def store_memory(content: str, category: str, importance: float = 0.5, player_id: int = 0) -> str:
     """存储一条记忆（用于后续检索）。
 
     Args:
         content: 记忆内容
         category: 类别（npc, location, player, quest, world, session）
         importance: 重要性 0.0-1.0
+        player_id: 玩家 ID（0 表示使用当前上下文中的玩家）
 
     Returns:
         存储结果
     """
+    ctx = get_tool_context()
+    if not ctx:
+        return "错误：工具上下文未初始化"
+
     valid = {"npc", "location", "player", "quest", "world", "session"}
     if category not in valid:
         return f"无效的记忆类别: {category}，可用: {valid}"
-    return f"记忆已存储: [{category}] {content[:50]}..."
+
+    try:
+        from core.models.repository import MemoryRepo
+        memory_repo = ctx.get_repo(MemoryRepo)
+
+        world_id = int(ctx.world_id) if ctx.world_id else 1
+        pid = player_id if player_id > 0 else ctx.player_id
+
+        # 存储记忆到数据库
+        memory = memory_repo.store(
+            world_id=world_id,
+            category=category,
+            source=f"player_{pid}",
+            content=content,
+            importance=max(0.0, min(1.0, importance)),
+            turn=0,  # 可以从 AgentState 获取当前回合
+        )
+
+        return f"记忆已存储: [{category}] {content[:50]}... (id={memory.id})"
+    except Exception as e:
+        logger.error(f"存储记忆失败: {e}")
+        return f"错误：{e}"
 
 
 @tool
