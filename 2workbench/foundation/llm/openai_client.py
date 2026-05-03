@@ -44,23 +44,34 @@ class OpenAICompatibleClient(BaseLLMClient):
 
     def __init__(
         self,
-        provider_name: str,
-        api_key: str,
-        base_url: str,
-        model: str,
+        provider_name: str = "",
+        api_key: str = "",
+        base_url: str = "",
+        model: str = "",
         max_tokens: int = 4096,
         temperature: float = 0.7,
         timeout: int = 60,
         max_retries: int = 3,
     ):
-        self._provider_name = provider_name
-        self._model = model
+        # 如果参数为空，尝试从配置读取
+        if not all([provider_name, api_key, base_url, model]):
+            try:
+                from foundation.config import settings
+                provider_name = provider_name or settings.default_provider or "deepseek"
+                api_key = api_key or getattr(settings, f"{provider_name}_api_key", "")
+                base_url = base_url or getattr(settings, f"{provider_name}_base_url", "")
+                model = model or settings.default_model or "deepseek-chat"
+            except Exception:
+                pass
+
+        self._provider_name = provider_name or "unknown"
+        self._model = model or "unknown"
         self._default_max_tokens = max_tokens
         self._default_temperature = temperature
 
         self._client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
+            api_key=api_key or "dummy-key",
+            base_url=base_url or "https://api.openai.com",
             timeout=timeout,
         )
 

@@ -61,7 +61,11 @@ class BaseRepository:
 class WorldRepo(BaseRepository):
     """世界仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def create(self, name: str, setting: str = "fantasy", description: str = "", db_path: str | None = None) -> World:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute(
                 "INSERT INTO worlds (name, setting, description) VALUES (?, ?, ?)",
@@ -71,16 +75,19 @@ class WorldRepo(BaseRepository):
             return World(**self._row_to_dict(row))
 
     def get_by_id(self, world_id: int, db_path: str | None = None) -> World | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM worlds WHERE id = ?", (world_id,)).fetchone()
             return World(**self._row_to_dict(row)) if row else None
 
     def list_all(self, db_path: str | None = None) -> list[World]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM worlds ORDER BY created_at DESC").fetchall()
             return [World(**self._row_to_dict(r)) for r in rows]
 
     def update(self, world_id: int, db_path: str | None = None, **kwargs) -> World | None:
+        db_path = db_path or self._db_path
         if not kwargs:
             return self.get_by_id(world_id, db_path)
         sets = ", ".join(f"{k} = ?" for k in kwargs)
@@ -90,6 +97,7 @@ class WorldRepo(BaseRepository):
             return self.get_by_id(world_id, db_path)
 
     def delete(self, world_id: int, db_path: str | None = None) -> bool:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute("DELETE FROM worlds WHERE id = ?", (world_id,))
             return cursor.rowcount > 0
@@ -144,7 +152,11 @@ class LocationRepo(BaseRepository):
 class PlayerRepo(BaseRepository):
     """玩家仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def create(self, world_id: int, name: str, db_path: str | None = None, **kwargs) -> Player:
+        db_path = db_path or self._db_path
         defaults = {"hp": 100, "max_hp": 100, "mp": 50, "max_mp": 50, "level": 1, "exp": 0, "gold": 0, "location_id": 0}
         defaults.update(kwargs)
         with get_db(db_path) as db:
@@ -156,16 +168,19 @@ class PlayerRepo(BaseRepository):
             return Player(**self._row_to_dict(row))
 
     def get_by_id(self, player_id: int, db_path: str | None = None) -> Player | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
             return Player(**self._row_to_dict(row)) if row else None
 
     def get_by_world(self, world_id: int, db_path: str | None = None) -> Player | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM players WHERE world_id = ? LIMIT 1", (world_id,)).fetchone()
             return Player(**self._row_to_dict(row)) if row else None
 
     def update(self, player_id: int, db_path: str | None = None, **kwargs) -> Player | None:
+        db_path = db_path or self._db_path
         if not kwargs:
             return self.get_by_id(player_id, db_path)
         sets = ", ".join(f"{k} = ?" for k in kwargs)
@@ -175,6 +190,7 @@ class PlayerRepo(BaseRepository):
             return self.get_by_id(player_id, db_path)
 
     def get_inventory(self, player_id: int, db_path: str | None = None) -> list[PlayerItem]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute(
                 """SELECT pi.*, i.name as item_name, i.item_type, i.rarity, i.stats, i.description
@@ -187,6 +203,7 @@ class PlayerRepo(BaseRepository):
             return [PlayerItem(**self._row_to_dict(r)) for r in rows]
 
     def add_item(self, player_id: int, item_id: int, quantity: int = 1, db_path: str | None = None) -> bool:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             # 检查是否已有
             existing = db.execute(
@@ -340,7 +357,7 @@ class QuestRepo(BaseRepository):
             return [self._row_to_quest(r) for r in rows]
 
     def update_status(self, quest_id: int, status: str, db_path: str | None = None) -> bool:
-        if status not in ("active", "completed", "failed", "not_started"):
+        if status not in ("active", "completed", "failed", "not_started", "abandoned"):
             return False
         with get_db(db_path) as db:
             db.execute("UPDATE quests SET status = ?, updated_at = datetime('now') WHERE id = ?", (status, quest_id))

@@ -491,6 +491,12 @@ class MainWindow(QMainWindow):
         # 应用主题
         theme_manager.apply("dark")
 
+        # 如果已有打开的项目，自动加载到编辑器
+        self._load_current_project_if_exists()
+
+        # 启动 HTTP 控制服务器
+        self._start_http_server()
+
     def _load_project_to_editors(self, project_path: Path) -> None:
         """将当前项目加载到所有编辑器（统一入口）"""
         from presentation.project.manager import project_manager
@@ -812,35 +818,22 @@ class MainWindow(QMainWindow):
         # 使用系统标准图标替代 Emoji
         from PyQt6.QtWidgets import QStyle
 
-        new_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder), "新建", self)
-        new_action.triggered.connect(self._on_new_project)
-        toolbar.addAction(new_action)
-
-        open_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon), "打开", self)
-        open_action.triggered.connect(self._on_open_project)
-        toolbar.addAction(open_action)
-
-        save_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "保存", self)
-        save_action.triggered.connect(self._on_save)
-        toolbar.addAction(save_action)
-
-        toolbar.addSeparator()
-
-        self._run_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay), "运行", self)
+        self._run_action = QAction("运行", self)
         self._run_action.triggered.connect(self._on_run_agent)
         toolbar.addAction(self._run_action)
 
-        self._stop_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop), "停止", self)
+        self._stop_action = QAction("停止", self)
         self._stop_action.triggered.connect(self._on_stop_agent)
+        self._stop_action.setEnabled(False)
         toolbar.addAction(self._stop_action)
 
         toolbar.addSeparator()
 
-        dark_action = QAction("Dark", self)
+        dark_action = QAction("暗", self)
         dark_action.triggered.connect(lambda: theme_manager.apply("dark"))
         toolbar.addAction(dark_action)
 
-        light_action = QAction("Light", self)
+        light_action = QAction("亮", self)
         light_action.triggered.connect(lambda: theme_manager.apply("light"))
         toolbar.addAction(light_action)
         
@@ -880,7 +873,7 @@ class MainWindow(QMainWindow):
         """设置 EventBus 订阅"""
         event_bus.subscribe("feature.ai.turn_start", self._on_turn_start)
         event_bus.subscribe("feature.ai.turn_end", self._on_turn_end)
-        event_bus.subscribe("feature.ai.agent_error", self._on_agent_error)
+        event_bus.subscribe("feature.ai.agent_error", self._on_agent_error_event)
         event_bus.subscribe("feature.ai.llm_stream_token", self._on_stream_token)
         # 调试面板事件
         self._setup_debugger_connections()
@@ -898,7 +891,8 @@ class MainWindow(QMainWindow):
         text_secondary = theme_manager.get_color("text_secondary")
         self._toolbar_status_agent.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
 
-    def _on_agent_error(self, event: Event) -> None:
+    def _on_agent_error_event(self, event: Event) -> None:
+        """EventBus 的 agent_error 事件处理"""
         error = event.get("error", "未知错误")
         self._toolbar_status_agent.setText(f"🤖 错误")
         error_color = theme_manager.get_color("error")
@@ -1210,7 +1204,7 @@ class MainWindow(QMainWindow):
     def _on_close_current_tab(self) -> None:
         """关闭当前标签页"""
         index = self.center_panel.tab_widget.currentIndex()
-        if index > 0:  # 不关闭第一个标签页（如果有欢迎页的话）
+        if index >= 0:
             self.center_panel._on_tab_close(index)
 
     def _switch_tab(self, direction: int) -> None:
@@ -1352,6 +1346,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_agent_thread') and self._agent_thread.isRunning():
             self._agent_thread.terminate()
             self._agent_thread.wait()
+            # 手动恢复按钮状态（terminate 不触发 finished 信号）
+            self._run_action.setEnabled(True)
+            self._stop_action.setEnabled(False)
             self._show_message("Agent 已停止")
         else:
             self._show_message("Agent 未在运行")

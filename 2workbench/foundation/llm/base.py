@@ -44,6 +44,7 @@ class StreamEvent:
     completion_tokens: int = 0
     total_tokens: int = 0
     error: str = ""
+    latency_ms: int = 0  # 延迟时间（毫秒）
 
 
 class BaseLLMClient(ABC):

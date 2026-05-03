@@ -39,21 +39,32 @@ def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     """创建新的数据库连接
 
     Args:
-        db_path: 数据库文件路径，默认从 settings 读取
+        db_path: 数据库文件路径，默认从 settings 读取。
+                支持特殊值 `:memory:` 表示内存数据库。
 
     Returns:
         配置好的 SQLite 连接
     """
     if db_path is None:
         db_path = get_db_path()
-    else:
+
+    # 处理内存数据库特殊值
+    is_memory_db = str(db_path) == ":memory:"
+
+    if not is_memory_db:
         db_path = Path(db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path_str = str(db_path)
+    else:
+        db_path_str = ":memory:"
 
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    conn = sqlite3.connect(db_path_str, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+
+    # 内存数据库不支持 WAL 模式，跳过
+    if not is_memory_db:
+        conn.execute("PRAGMA journal_mode=WAL")
+
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
@@ -117,11 +128,14 @@ def init_db(
 
     Args:
         schema_path: SQL schema 文件路径
-        db_path: 数据库文件路径
+        db_path: 数据库文件路径，支持 `:memory:` 内存数据库
 
     Returns:
         是否成功初始化
     """
+    # 处理内存数据库特殊值
+    is_memory_db = str(db_path) == ":memory:" if db_path else False
+
     if schema_path is None:
         # 默认 schema 路径
         schema_path = Path(__file__).parent.parent / "core" / "models" / "schema.sql"
@@ -148,12 +162,17 @@ def init_db(
                 db.executescript(sql)
                 logger.info(f"数据库 schema 已执行: {schema_path}")
             else:
-                logger.warning(f"Schema 文件不存在: {schema_path}，跳过初始化")
+                # 内存数据库模式下 schema 不存在是正常情况，不报错
+                if is_memory_db:
+                    logger.info(f"内存数据库模式，schema 文件不存在则跳过: {schema_path}")
+                else:
+                    logger.warning(f"Schema 文件不存在: {schema_path}，跳过初始化")
 
             # 更新版本号
             db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
-        logger.info(f"数据库初始化完成: {db_path or get_db_path()} (v{SCHEMA_VERSION})")
+        db_path_str = ":memory:" if is_memory_db else str(db_path or get_db_path())
+        logger.info(f"数据库初始化完成: {db_path_str} (v{SCHEMA_VERSION})")
 
         # 通知其他模块
         try:

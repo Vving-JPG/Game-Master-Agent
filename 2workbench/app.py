@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument("--debug", "-d", action="store_true", help="调试模式")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="日志级别")
     parser.add_argument("--skip-selector", action="store_true", help="跳过项目选择器")
+    parser.add_argument("--dev", action="store_true", help="开发模式（启用热重载）")
     return parser.parse_args()
 
 
@@ -196,7 +197,14 @@ def main() -> None:
     window = MainWindow()
     window.show()
 
-    # 8. 启动事件循环
+    # 9. 开发模式：启动热重载
+    if args.dev:
+        from foundation.hot_reload import create_reloader_for_project
+        reloader = create_reloader_for_project(PROJECT_ROOT)
+        reloader.start_background()
+        logger.info("开发模式：热重载已启用")
+
+    # 10. 启动事件循环
     from foundation.logger import get_logger
     logger = get_logger(__name__)
     logger.info("Game Master Agent IDE 启动完成")

@@ -82,7 +82,8 @@ class ProjectItemDelegate(QStyledItemDelegate):
 
         # 项目名称（图标右侧）
         name_rect = QRect(rect.left() + 104, rect.top() + 14, rect.width() - 280, 24)
-        painter.setFont(QFont("Microsoft YaHei", 11, QFont.Weight.Medium))
+        font_family = p.get("font_family", '"Microsoft YaHei", sans-serif')
+        painter.setFont(QFont(font_family.split(",")[0].strip('"'), 11, QFont.Weight.Medium))
         painter.setPen(QColor(text_bright))
         painter.drawText(name_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                         info.get("name", ""))
@@ -90,14 +91,14 @@ class ProjectItemDelegate(QStyledItemDelegate):
         # 路径（名称下方）
         path_text = f"📁 {info.get('path', '')}"
         path_rect = QRect(rect.left() + 104, rect.top() + 40, rect.width() - 280, 20)
-        painter.setFont(QFont("Microsoft YaHei", 10))
+        painter.setFont(QFont(font_family.split(",")[0].strip('"'), 10))
         painter.setPen(QColor(text_secondary))
         painter.drawText(path_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                         path_text)
 
         # 右侧：修改时间
         time_rect = QRect(rect.right() - 170, rect.top() + 20, 160, 20)
-        painter.setFont(QFont("Microsoft YaHei", 10))
+        painter.setFont(QFont(font_family.split(",")[0].strip('"'), 10))
         painter.setPen(QColor(text_disabled))
         painter.drawText(time_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                         info.get("modified", ""))
@@ -140,6 +141,9 @@ class ProjectSelector(QDialog):
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
+        # 获取主题调色板
+        p = theme_manager.PALETTES.get(theme_manager.current_theme, {})
+
         # ========== Header (64px) ==========
         self._header = QFrame()
         self._header.setFixedHeight(64)
@@ -156,7 +160,8 @@ class ProjectSelector(QDialog):
 
         # 标题
         title_label = QLabel("Game Master Agent")
-        title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
+        font_family = p.get("font_family", '"Microsoft YaHei", sans-serif')
+        title_label.setFont(QFont(font_family.split(",")[0].strip('"'), 14, QFont.Weight.Bold))
         title_label.setObjectName("titleLabel")
         header_layout.addWidget(title_label)
 
@@ -543,38 +548,92 @@ class ProjectSelector(QDialog):
         self._apply_filter_and_sort()
 
     def _scan_projects(self) -> List[Dict[str, Any]]:
-        """扫描项目目录"""
+        """扫描项目目录和最近打开的项目"""
         projects = []
+        project_paths = set()  # 用于去重
+
+        def normalize_path(p: str) -> str:
+            """标准化路径用于比较"""
+            return p.replace("\\", "/").lower()
+
+        # 1. 首先加载最近打开的项目（包括外部路径如D盘）
+        try:
+            from presentation.project.manager import recent_projects_manager
+            recent_projects = recent_projects_manager.get_all()
+            for recent in recent_projects:
+                path = recent.get("path", "")
+                if not path:
+                    continue
+                # 标准化路径用于比较
+                normalized = normalize_path(path)
+                if normalized in project_paths:
+                    continue
+                if not Path(path).exists():
+                    continue
+
+                project_paths.add(normalized)
+                # 尝试读取项目信息
+                project_file = Path(path) / "project.json"
+                if project_file.exists():
+                    try:
+                        with open(project_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        mtime = Path(path).stat().st_mtime
+                        modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+                        projects.append({
+                            "name": data.get("name", recent.get("name", Path(path).name.replace(".agent", ""))),
+                            "path": path,
+                            "template": data.get("template", recent.get("template", "blank")),
+                            "modified": modified,
+                            "created": data.get("created", modified),
+                            "is_recent": True,  # 标记为最近打开的项目
+                        })
+                    except Exception:
+                        # 如果读取失败，使用最近列表中的信息
+                        projects.append({
+                            "name": recent.get("name", Path(path).name.replace(".agent", "")),
+                            "path": path,
+                            "template": recent.get("template", "blank"),
+                            "modified": recent.get("last_opened", "")[:10] if recent.get("last_opened") else "",
+                            "created": "",
+                            "is_recent": True,
+                        })
+        except Exception as e:
+            logger.warning(f"加载最近项目失败: {e}")
+
+        # 2. 扫描 workspace/data 目录下的项目
         try:
             from presentation.project.manager import project_manager
             workspace = project_manager.workspace_dir / "data" if project_manager.workspace_dir else Path("./data")
         except Exception:
             workspace = Path("./data")
 
-        if not workspace.exists():
-            return projects
+        if workspace.exists():
+            for project_dir in workspace.iterdir():
+                if project_dir.is_dir() and project_dir.suffix == ".agent":
+                    path_str = str(project_dir)
+                    normalized = normalize_path(path_str)
+                    if normalized in project_paths:
+                        continue  # 跳过已添加的
+                    project_paths.add(normalized)
 
-        for project_dir in workspace.iterdir():
-            if project_dir.is_dir() and project_dir.suffix == ".agent":
-                project_file = project_dir / "project.json"
-                if project_file.exists():
-                    try:
-                        with open(project_file, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-
-                        # 获取最后修改时间
-                        mtime = project_dir.stat().st_mtime
-                        modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-
-                        projects.append({
-                            "name": data.get("name", project_dir.name),
-                            "path": str(project_dir),
-                            "template": data.get("template", "blank"),
-                            "modified": modified,
-                            "created": data.get("created", modified),
-                        })
-                    except Exception as e:
-                        logger.warning(f"读取项目失败 {project_dir}: {e}")
+                    project_file = project_dir / "project.json"
+                    if project_file.exists():
+                        try:
+                            with open(project_file, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                            mtime = project_dir.stat().st_mtime
+                            modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+                            projects.append({
+                                "name": data.get("name", project_dir.name),
+                                "path": path_str,
+                                "template": data.get("template", "blank"),
+                                "modified": modified,
+                                "created": data.get("created", modified),
+                                "is_recent": False,
+                            })
+                        except Exception as e:
+                            logger.warning(f"读取项目失败 {project_dir}: {e}")
 
         return projects
 
@@ -667,6 +726,25 @@ class ProjectSelector(QDialog):
         """导入项目"""
         path = QFileDialog.getExistingDirectory(self, "选择项目目录")
         if path:
+            # 添加到最近项目列表
+            try:
+                from presentation.project.manager import recent_projects_manager
+                # 尝试读取项目信息
+                project_file = Path(path) / "project.json"
+                name = Path(path).name.replace(".agent", "")
+                template = "blank"
+                if project_file.exists():
+                    try:
+                        with open(project_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        name = data.get("name", name)
+                        template = data.get("template", "blank")
+                    except Exception:
+                        pass
+                recent_projects_manager.add(path, name, template)
+            except Exception as e:
+                logger.warning(f"添加项目到最近列表失败: {e}")
+
             self.project_selected.emit(path)
             self.accept()
 

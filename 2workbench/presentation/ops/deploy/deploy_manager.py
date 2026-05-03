@@ -39,6 +39,7 @@ class DeployManager(BaseWidget):
         self._deploy_status = "idle"  # idle / packaging / deploying / running / error
         self._server_process = None
         self._server_thread = None
+        self._http_server = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -209,9 +210,9 @@ class DeployManager(BaseWidget):
                 from presentation.server import ThreadedHTTPServer, RequestHandler
 
                 def run_server():
-                    server = ThreadedHTTPServer((host, port), RequestHandler)
+                    self._http_server = ThreadedHTTPServer((host, port), RequestHandler)
                     logger.info(f"HTTP 服务启动: http://{host}:{port}")
-                    server.serve_forever()
+                    self._http_server.serve_forever()
 
                 self._server_thread = threading.Thread(target=run_server, daemon=True)
                 self._server_thread.start()
@@ -221,6 +222,22 @@ class DeployManager(BaseWidget):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                 )
+
+                # 启动进程监控线程，防止进程挂起导致UI冻结
+                def monitor_process():
+                    try:
+                        self._server_process.wait(timeout=10)
+                        # 如果进程正常结束，记录日志
+                        if self._server_process.returncode != 0:
+                            stderr = self._server_process.stderr.read().decode('utf-8', errors='ignore')
+                            logger.error(f"服务进程异常退出，返回码: {self._server_process.returncode}, 错误: {stderr}")
+                    except subprocess.TimeoutExpired:
+                        # 进程正常运行超过10秒，视为启动成功
+                        logger.info("服务进程已稳定运行")
+                    except Exception as e:
+                        logger.error(f"进程监控异常: {e}")
+
+                threading.Thread(target=monitor_process, daemon=True).start()
 
             self._deploy_status = "running"
             self._status_label.setText(f"✅ 运行中 — http://{host}:{port}")
@@ -235,6 +252,7 @@ class DeployManager(BaseWidget):
 
     def _stop_service(self) -> None:
         """停止 HTTP 服务"""
+        # 停止子进程
         if self._server_process:
             self._server_process.terminate()
             try:
@@ -242,6 +260,11 @@ class DeployManager(BaseWidget):
             except subprocess.TimeoutExpired:
                 self._server_process.kill()
             self._server_process = None
+
+        # 停止内嵌服务器
+        if hasattr(self, '_http_server') and self._http_server:
+            self._http_server.shutdown()
+            self._http_server = None
 
         self._deploy_status = "idle"
         self._status_label.setText("⏹ 已停止")

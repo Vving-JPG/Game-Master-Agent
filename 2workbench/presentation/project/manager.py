@@ -63,8 +63,10 @@ PROJECT_TEMPLATES = {
                 {"id": "output", "type": "output", "label": "输出", "position": {"x": 700, "y": 200}},
             ],
             "edges": [
+                {"from": "__start__", "to": "input"},
                 {"from": "input", "to": "reasoning"},
                 {"from": "reasoning", "to": "output"},
+                {"from": "output", "to": "__end__"},
             ],
         },
         "prompts": {
@@ -128,9 +130,11 @@ PROJECT_TEMPLATES = {
                 {"id": "output", "type": "output", "label": "回复输出", "position": {"x": 700, "y": 200}},
             ],
             "edges": [
+                {"from": "__start__", "to": "input"},
                 {"from": "input", "to": "context"},
                 {"from": "context", "to": "llm"},
                 {"from": "llm", "to": "output"},
+                {"from": "output", "to": "__end__"},
             ],
         },
         "prompts": {
@@ -151,6 +155,10 @@ class ProjectManager:
         self._workspace = Path(workspace_dir) if workspace_dir else Path.cwd()
         self._current_project: AgentProjectConfig | None = None
         self._project_path: Path | None = None
+
+    @property
+    def workspace_dir(self) -> Path:
+        return self._workspace
 
     @property
     def current_project(self) -> AgentProjectConfig | None:
@@ -278,6 +286,12 @@ class ProjectManager:
         self._current_project = config
         self._project_path = project_dir
 
+        # 添加到最近项目列表
+        try:
+            recent_projects_manager.add(project_dir, config.name, config.template)
+        except Exception as e:
+            logger.warning(f"添加项目到最近列表失败: {e}")
+
         logger.info(f"项目已打开: {project_dir} ({config.name})")
         event_bus.emit(Event(type="ui.project.opened", data={
             "path": str(project_dir),
@@ -379,6 +393,30 @@ class ProjectManager:
             return []
         return [p.stem for p in prompts_dir.glob("*.md")]
 
+    def save_project_config(self, config_data: dict) -> None:
+        """保存项目配置到 config.json"""
+        if not self._project_path:
+            raise RuntimeError("没有打开的项目")
+        config_path = self._project_path / "config.json"
+        config_path.write_text(
+            json.dumps(config_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(f"项目配置已保存: {config_path}")
+
+    def load_project_config(self) -> dict:
+        """从 config.json 加载项目配置"""
+        if not self._project_path:
+            return {}
+        config_path = self._project_path / "config.json"
+        if not config_path.exists():
+            return {}
+        try:
+            return json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning(f"加载项目配置失败: {e}")
+            return {}
+
     def _save_project_json(self, project_dir: Path, config: AgentProjectConfig) -> None:
         """保存 project.json"""
         project_json = project_dir / "project.json"
@@ -395,3 +433,91 @@ class ProjectManager:
 
 # 全局单例
 project_manager = ProjectManager()
+
+
+class RecentProjectsManager:
+    """最近打开的项目管理器"""
+
+    MAX_RECENT = 20  # 最多保存20个最近项目
+
+    def __init__(self):
+        self._config_dir = Path.home() / ".game_master_agent"
+        self._config_file = self._config_dir / "recent_projects.json"
+        self._recent_projects: list[dict] = []
+        self._load()
+
+    def _load(self) -> None:
+        """加载最近项目列表"""
+        try:
+            if self._config_file.exists():
+                data = json.loads(self._config_file.read_text(encoding="utf-8"))
+                self._recent_projects = data.get("recent_projects", [])
+                # 过滤掉不存在的项目
+                self._recent_projects = [
+                    p for p in self._recent_projects
+                    if Path(p.get("path", "")).exists()
+                ]
+        except Exception as e:
+            logger.warning(f"加载最近项目列表失败: {e}")
+            self._recent_projects = []
+
+    def _save(self) -> None:
+        """保存最近项目列表"""
+        try:
+            self._config_dir.mkdir(parents=True, exist_ok=True)
+            self._config_file.write_text(
+                json.dumps({"recent_projects": self._recent_projects}, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+        except Exception as e:
+            logger.warning(f"保存最近项目列表失败: {e}")
+
+    def add(self, path: str | Path, name: str = "", template: str = "blank") -> None:
+        """添加项目到最近列表"""
+        # 标准化路径格式（统一使用正斜杠，去除重复）
+        try:
+            path_obj = Path(path).resolve()
+            path_str = str(path_obj).replace("\\", "/")
+        except Exception:
+            path_str = str(path).replace("\\", "/")
+
+        # 移除已存在的相同路径（比较时统一格式）
+        self._recent_projects = [
+            p for p in self._recent_projects
+            if p.get("path", "").replace("\\", "/") != path_str
+        ]
+
+        # 添加到开头
+        self._recent_projects.insert(0, {
+            "path": path_str,
+            "name": name or Path(path).name.replace(".agent", ""),
+            "template": template,
+            "last_opened": datetime.now().isoformat(),
+        })
+
+        # 限制数量
+        self._recent_projects = self._recent_projects[:self.MAX_RECENT]
+
+        self._save()
+
+    def get_all(self) -> list[dict]:
+        """获取所有最近项目"""
+        return self._recent_projects.copy()
+
+    def remove(self, path: str | Path) -> None:
+        """从最近列表中移除项目"""
+        path_str = str(path)
+        self._recent_projects = [
+            p for p in self._recent_projects
+            if p.get("path") != path_str
+        ]
+        self._save()
+
+    def clear(self) -> None:
+        """清空最近列表"""
+        self._recent_projects = []
+        self._save()
+
+
+# 全局最近项目管理器
+recent_projects_manager = RecentProjectsManager()

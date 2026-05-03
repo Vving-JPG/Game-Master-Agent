@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 @dataclass
 class ParsedCommand:
     """解析后的命令"""
-    intent: str           # 命令意图（如 update_hp, move_to, give_item）
+    intent: str = ""           # 命令意图（如 update_hp, move_to, give_item）
     params: dict[str, Any] = field(default_factory=dict)
 
 

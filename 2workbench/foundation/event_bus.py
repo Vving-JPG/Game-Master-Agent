@@ -153,8 +153,29 @@ class EventBus:
             ]
         logger.debug(f"取消订阅: {event_type} -> {handler.__qualname__}")
 
-    def emit(self, event: Event) -> list[Any]:
-        """同步发布事件，返回所有处理器的返回值列表"""
+    def emit(self, event: Event | str, data: dict[str, Any] | None = None, **kwargs) -> list[Any]:
+        """同步发布事件，返回所有处理器的返回值列表
+
+        Args:
+            event: Event 对象或事件类型字符串
+            data: 事件数据（当 event 为字符串时使用）
+            **kwargs: 额外的事件属性（source, target 等）
+
+        用法:
+            # 方式1: 传入 Event 对象
+            event_bus.emit(Event(type="test", data={"key": "value"}))
+
+            # 方式2: 传入事件类型和数据（便捷方式）
+            event_bus.emit("test", {"key": "value"}, source="module")
+        """
+        # 便捷方式：将字符串转换为 Event 对象
+        if isinstance(event, str):
+            event = Event(
+                type=event,
+                data=data or {},
+                **{k: v for k, v in kwargs.items() if k in ("source", "target")}
+            )
+
         results = []
         handlers_to_remove = []
 

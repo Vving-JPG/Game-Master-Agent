@@ -59,6 +59,8 @@ class TemplateCard(QFrame):
         bg_hover = p.get("bg_hover", "#3e3e42")
         border = p.get("border", "#3e3e42")
         accent = p.get("accent", "#007acc")
+        text_bright = p.get("text_bright", "#ffffff")
+        text_primary = p.get("text_primary", "#cccccc")
 
         if self._selected:
             self.setStyleSheet(f"""
@@ -68,7 +70,7 @@ class TemplateCard(QFrame):
                     border-radius: 8px;
                 }}
                 QLabel {{
-                    color: #ffffff;
+                    color: {text_bright};
                 }}
             """)
         else:
@@ -83,7 +85,7 @@ class TemplateCard(QFrame):
                     border: 2px solid {self._color};
                 }}
                 QLabel {{
-                    color: #cccccc;
+                    color: {text_primary};
                 }}
             """)
 

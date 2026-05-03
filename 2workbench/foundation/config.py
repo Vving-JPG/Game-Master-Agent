@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     # DeepSeek（默认）
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_base_url_anthropic: str = "https://api.deepseek.com/anthropic"
     deepseek_model: str = "deepseek-chat"
     deepseek_max_tokens: int = 4096
     deepseek_temperature: float = 0.7

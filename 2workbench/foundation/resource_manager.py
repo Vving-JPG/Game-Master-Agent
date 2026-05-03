@@ -44,7 +44,7 @@ class ResourceManager:
         rm.write_file("npcs/新NPC.md", content)
     """
 
-    def __init__(self, base_path: str | Path):
+    def __init__(self, base_path: str | Path = "./data/resources"):
         self._base_path = Path(base_path)
         self._base_path.mkdir(parents=True, exist_ok=True)
 

@@ -69,13 +69,44 @@ def register_tool(name: str, description: str, parameters_schema: dict,
 
 
 def get_all_tools() -> list:
-    """获取所有已注册的工具（包括内置和动态注册的）"""
+    """获取所有已注册的工具（包括内置和动态注册的）
+
+    Returns:
+        LangChain Tool 对象列表（用于 LangGraph 执行）
+    """
     tools = list(ALL_TOOLS)
     for name, tool_def in _REGISTERED_TOOLS.items():
         # 动态创建 @tool 装饰的函数
         func = _create_tool_function(name, tool_def)
         tools.append(func)
     return tools
+
+
+def get_all_tools_info() -> list[dict]:
+    """获取所有工具的元数据信息（用于工具管理器显示）
+
+    Returns:
+        工具信息字典列表，每个字典包含 name, description 等字段
+    """
+    tools_info = []
+
+    # 内置工具
+    for tool in ALL_TOOLS:
+        tools_info.append({
+            "name": tool.name,
+            "description": tool.description or "",
+            "category": "builtin",
+        })
+
+    # 动态注册的工具
+    for name, tool_def in _REGISTERED_TOOLS.items():
+        tools_info.append({
+            "name": name,
+            "description": tool_def.get("description", ""),
+            "category": "custom",
+        })
+
+    return tools_info
 
 
 def _create_tool_function(name: str, tool_def: dict):
@@ -283,12 +314,12 @@ def move_to_location(location_name: str, player_id: int = 0) -> str:
 
 
 @tool
-def update_npc_relationship(npc_name: str, change: int, player_id: int = 0) -> str:
+def update_npc_relationship(npc_name: str, change: float, player_id: int = 0) -> str:
     """修改 NPC 对玩家的关系值。
 
     Args:
         npc_name: NPC 名称
-        change: 关系值变化（正数=好感增加，负数=好感降低）
+        change: 关系值变化（正数=好感增加，负数=好感降低），范围 -1.0 到 1.0
         player_id: 玩家 ID（0 表示使用当前上下文中的玩家）
 
     Returns:
@@ -308,16 +339,16 @@ def update_npc_relationship(npc_name: str, change: int, player_id: int = 0) -> s
         # 查找匹配的 NPC
         for npc in npcs:
             if npc.name == npc_name:
-                # 更新关系值（限制在 -100 到 100 之间）
-                current_rel = npc.relationships.get("player", 0)
-                new_rel = max(-100, min(100, current_rel + change))
+                # 更新关系值（限制在 -1.0 到 1.0 之间）
+                current_rel = npc.relationships.get("player", 0.0)
+                new_rel = max(-1.0, min(1.0, current_rel + change))
                 npc.relationships["player"] = new_rel
 
                 # 保存到数据库
                 npc_repo.update(npc.id, relationships=npc.relationships)
 
                 direction = "增加" if change > 0 else "降低"
-                return f"{npc_name} 对玩家的好感度{direction}了 {abs(change)} 点（当前: {new_rel}）"
+                return f"{npc_name} 对玩家的好感度{direction}了 {abs(change):.2f}（当前: {new_rel:.2f}）"
 
         return f"错误：未找到 NPC '{npc_name}'"
     except Exception as e:
@@ -355,16 +386,22 @@ def update_quest_status(quest_title: str, status: str) -> str:
         for quest in quests:
             if quest.title.lower() == quest_title.lower():
                 # 更新任务状态
-                quest_repo.update_status(quest.id, status)
-                return f"任务 [{quest_title}] 状态已更新为: {status}"
+                success = quest_repo.update_status(quest.id, status)
+                if success:
+                    return f"任务 [{quest_title}] 状态已更新为: {status}"
+                else:
+                    return f"错误：无法将任务 [{quest_title}] 状态更新为 {status}"
 
         # 如果没有找到匹配的任务，尝试在所有任务中搜索
         # 这里使用 list_all 作为备选方案
         all_quests = quest_repo.list_all()
         for quest in all_quests:
             if quest.title.lower() == quest_title.lower():
-                quest_repo.update_status(quest.id, status)
-                return f"任务 [{quest_title}] 状态已更新为: {status}"
+                success = quest_repo.update_status(quest.id, status)
+                if success:
+                    return f"任务 [{quest_title}] 状态已更新为: {status}"
+                else:
+                    return f"错误：无法将任务 [{quest_title}] 状态更新为 {status}"
 
         return f"错误：未找到任务 '{quest_title}'"
     except Exception as e:

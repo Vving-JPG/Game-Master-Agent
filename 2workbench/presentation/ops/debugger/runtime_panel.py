@@ -491,3 +491,9 @@ class RuntimePanel(BaseWidget):
     def update_performance(self, metrics: dict[str, Any]) -> None:
         """更新性能指标"""
         self._perf_metrics.update_metrics(metrics)
+
+    def closeEvent(self, event) -> None:
+        """关闭面板时清理 timer"""
+        if hasattr(self, '_refresh_timer'):
+            self._refresh_timer.stop()
+        super().closeEvent(event)

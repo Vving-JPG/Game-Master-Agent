@@ -40,6 +40,10 @@ logger = get_logger(__name__)
 _prompt_builder = PromptBuilder()
 
 
+# 节点函数别名（兼容旧代码）
+handle_event = None  # 将在文件末尾设置为 node_handle_event
+
+
 async def node_handle_event(state: AgentState) -> dict[str, Any]:
     """节点 1: 接收事件，更新状态
 
@@ -387,3 +391,7 @@ def _get_system_prompt() -> str:
 - 根据玩家选择产生有意义的后果
 - 适当使用对话和描写来丰富场景
 """
+
+
+# 设置别名（在模块加载完成后）
+handle_event = node_handle_event
