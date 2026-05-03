@@ -27,6 +27,9 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QLabel
 
 from presentation.state_api import init_state_api, get_state_api
+from foundation.logger import get_logger
+
+logger = get_logger(__name__)
 
 # 默认端口
 DEFAULT_PORT = 18080
@@ -38,8 +41,21 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
     # GUI 实例引用 (由 MainWindow 设置)
     gui_instance = None
     project_root = ""
+    _lock = threading.Lock()
 
-    def log_message(self, format, *args):
+    @classmethod
+    def set_gui(cls, gui, root: str) -> None:
+        """线程安全地设置 GUI 实例"""
+        with cls._lock:
+            cls.gui_instance = gui
+            cls.project_root = root
+
+    def _get_gui(self):
+        """线程安全地获取 GUI 实例"""
+        with self._lock:
+            return self.gui_instance, self.project_root
+
+    def log_message(self, fmt, *args):
         """静默日志 (不打印到控制台)"""
         pass
 
@@ -63,7 +79,8 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
 
     def _resolve_path(self, path: str) -> Path:
         """解析文件路径，防止目录遍历"""
-        root = Path(self.project_root)
+        gui, project_root = self._get_gui()
+        root = Path(project_root)
         full = (root / path).resolve()
         if not str(full).startswith(str(root.resolve())):
             raise ValueError(f"禁止访问: {path}")
@@ -137,7 +154,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
 
     def _handle_get_status(self):
         """获取状态"""
-        gui = self.gui_instance
+        gui, _ = self._get_gui()
         if gui:
             self._send_json({"status": "running", "window": gui.windowTitle()})
         else:
@@ -170,7 +187,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "状态 API 未初始化"}, 500)
             return
 
-        gui = self.gui_instance
+        gui, _ = self._get_gui()
         hwnd = gui.winId() if gui else None
         result = api.get_uia_tree(hwnd)
         self._send_json(result)
@@ -198,7 +215,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
 
     def _handle_create_project(self, body: dict):
         """在 GUI 中创建新项目 — 使用信号槽机制确保在主线程执行"""
-        gui = self.gui_instance
+        gui, project_root = self._get_gui()
         if not gui:
             self._send_json({"error": "GUI 实例不可用"}, 500)
             return
@@ -212,23 +229,23 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "缺少 name 参数"}, 400)
                 return
 
-            print(f"[HTTP Server] 请求创建项目: {name} (模板: {template})")
+            logger.info(f"[HTTP Server] 请求创建项目: {name} (模板: {template})")
             
             # 使用信号槽机制
-            gui.create_project_requested.emit(name, template, directory, self.project_root)
+            gui.create_project_requested.emit(name, template, directory, project_root)
             
-            print(f"[HTTP Server] 创建项目信号已发送")
+            logger.info(f"[HTTP Server] 创建项目信号已发送")
             self._send_json({"status": "creating", "name": name, "template": template})
 
         except Exception as e:
             import traceback
             self._send_json({"error": f"创建项目失败: {str(e)}"}, 500)
-            print(f"[HTTP Server] Error: {e}")
-            print(traceback.format_exc())
+            logger.error(f"[HTTP Server] Error: {e}")
+            logger.error(traceback.format_exc())
 
     def _handle_open_project(self, body: dict):
         """在 GUI 中打开项目 — 使用信号槽机制确保在主线程执行"""
-        gui = self.gui_instance
+        gui, project_root = self._get_gui()
         if not gui:
             self._send_json({"error": "GUI 实例不可用"}, 500)
             return
@@ -239,19 +256,19 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "缺少 path 参数"}, 400)
                 return
 
-            print(f"[HTTP Server] 请求打开项目: {project_path}")
+            logger.info(f"[HTTP Server] 请求打开项目: {project_path}")
             
             # 使用信号槽机制 — 信号会自动在接收者（gui）的线程中执行
-            gui.open_project_requested.emit(project_path, self.project_root)
+            gui.open_project_requested.emit(project_path, project_root)
             
-            print(f"[HTTP Server] 信号已发送")
+            logger.info(f"[HTTP Server] 信号已发送")
             self._send_json({"status": "opening", "path": project_path})
 
         except Exception as e:
             import traceback
             self._send_json({"error": f"打开项目失败: {str(e)}"}, 500)
-            print(f"[HTTP Server] Error: {e}")
-            print(traceback.format_exc())
+            logger.error(f"[HTTP Server] Error: {e}")
+            logger.error(traceback.format_exc())
 
     def _handle_get_screenshot(self):
         """截图 GUI 界面 — 使用 Windows API 支持后台窗口截图
@@ -262,7 +279,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
         3. 截图
         4. 最小化窗口
         """
-        gui = self.gui_instance
+        gui, _ = self._get_gui()
         if not gui:
             self._send_json({"error": "GUI 实例不可用"}, 500)
             return
@@ -350,7 +367,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
                         ctypes.windll.user32.SetForegroundWindow(hwnd)
                 else:
                     ctypes.windll.user32.SetForegroundWindow(hwnd)
-            except:
+            except Exception:
                 # 备选方案：使用 ShowWindow
                 ctypes.windll.user32.ShowWindow(hwnd, SW_SHOW)
             
@@ -360,7 +377,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             return bool(is_minimized)
             
         except Exception as e:
-            print(f"[Screenshot] 无法将窗口带到前台: {e}")
+            logger.warning(f"[Screenshot] 无法将窗口带到前台: {e}")
             return False
     
     def _minimize_window(self, gui) -> None:
@@ -376,7 +393,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             ctypes.windll.user32.ShowWindow(hwnd, SW_MINIMIZE)
             
         except Exception as e:
-            print(f"[Screenshot] 无法最小化窗口: {e}")
+            logger.warning(f"[Screenshot] 无法最小化窗口: {e}")
     
     def _capture_window_winapi(self, gui) -> bytes | None:
         """使用 Windows API 捕获窗口（支持后台窗口）
@@ -403,15 +420,15 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             try:
                 # Windows 10 1607+
                 ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-            except:
+            except Exception:
                 try:
                     # Windows 8.1+
                     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per Monitor DPI Aware
-                except:
+                except Exception:
                     try:
                         # Windows Vista+
                         ctypes.windll.user32.SetProcessDPIAware()
-                    except:
+                    except Exception:
                         pass
             
             # 获取窗口尺寸（包括非客户区：标题栏、边框、菜单栏等）
@@ -422,14 +439,14 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
             try:
                 dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
                 scale_factor = dpi / 96.0  # 96 是标准 DPI
-            except:
+            except Exception:
                 # 如果 GetDpiForWindow 不可用，尝试其他方法
                 try:
                     hdc = ctypes.windll.user32.GetDC(hwnd)
                     dpi_x = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
                     ctypes.windll.user32.ReleaseDC(hwnd, hdc)
                     scale_factor = dpi_x / 96.0
-                except:
+                except Exception:
                     scale_factor = 1.0
             
             # 计算实际像素尺寸（考虑 DPI 缩放）
@@ -520,9 +537,9 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
                 ctypes.windll.gdi32.DeleteDC(hdc_screen)
                 
         except Exception as e:
-            print(f"[Screenshot] Windows API 截图失败: {e}")
+            logger.error(f"[Screenshot] Windows API 截图失败: {e}")
             import traceback
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             return None
     
     def _capture_with_qt(self, gui) -> None:
@@ -554,7 +571,7 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
 
     def _handle_click_widget(self, widget: str):
         """模拟点击界面元素"""
-        gui = self.gui_instance
+        gui, _ = self._get_gui()
         if not gui:
             self._send_json({"error": "GUI 实例不可用"}, 500)
             return
@@ -592,10 +609,8 @@ class GuiHTTPHandler(BaseHTTPRequestHandler):
 
 def start_server(gui_instance, port: int = DEFAULT_PORT):
     """在后台线程启动 HTTP 服务器"""
-    from pathlib import Path
-
-    GuiHTTPHandler.gui_instance = gui_instance
-    GuiHTTPHandler.project_root = str(Path(__file__).parent.parent)
+    # 使用线程安全的方法设置 GUI 实例
+    GuiHTTPHandler.set_gui(gui_instance, str(Path(__file__).parent.parent))
 
     # 初始化结构化状态 API
     init_state_api(gui_instance)

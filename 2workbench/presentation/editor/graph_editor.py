@@ -295,7 +295,9 @@ class GraphScene(QGraphicsScene):
         super().__init__(parent)
         self._nodes: dict[str, GraphNodeItem] = {}
         self._edges: list[GraphEdgeItem] = []
-        self.setBackgroundBrush(QBrush(QColor("#1e1e1e")))
+        # 从主题管理器获取背景色
+        bg_color = theme_manager.PALETTES.get(theme_manager.current_theme, {}).get("bg_primary", "#1e1e1e")
+        self.setBackgroundBrush(QBrush(QColor(bg_color)))
 
     def add_node(self, node_id: str, node_type: str, label: str, position: dict | None = None) -> GraphNodeItem:
         """添加节点"""
@@ -319,14 +321,16 @@ class GraphScene(QGraphicsScene):
         """删除节点及其连线"""
         node = self._nodes.pop(node_id, None)
         if node:
-            # 删除相关边
+            # 先从场景中移除关联的边
+            for edge in self._edges[:]:
+                if edge.source.node_id == node_id or edge.target.node_id == node_id:
+                    self.removeItem(edge)
+            # 过滤边列表
             self._edges = [
                 e for e in self._edges
                 if e.source.node_id != node_id and e.target.node_id != node_id
             ]
-            for edge in self._edges[:]:
-                if edge.scene():
-                    pass  # 保留有效边
+            # 移除节点
             self.removeItem(node)
 
     def set_running_node(self, node_id: str | None) -> None:
@@ -397,7 +401,8 @@ class GraphEditorView(QGraphicsView):
     def fit_to_view(self) -> None:
         """适应视图"""
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self._zoom = 1.0
+        # 从当前 transform 获取实际缩放值
+        self._zoom = self.transform().m11()  # m11() 返回水平缩放因子
 
 
 class NodePropertyDialog(QDialog):

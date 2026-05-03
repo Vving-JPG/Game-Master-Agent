@@ -72,31 +72,7 @@ class LeftPanel(BaseWidget):
         # 连接双击事件
         self.project_tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         
-        # 设置样式
-        self.project_tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #252526;
-                color: #cccccc;
-                border: none;
-                font-size: 13px;
-            }
-            QTreeWidget::item {
-                padding: 4px 8px;
-            }
-            QTreeWidget::item:selected {
-                background-color: #094771;
-            }
-            QTreeWidget::item:hover {
-                background-color: #2a2d2e;
-            }
-            QHeaderView::section {
-                background-color: #333333;
-                color: #cccccc;
-                padding: 6px;
-                border: none;
-                font-weight: bold;
-            }
-        """)
+        # 样式由全局 QSS 控制，不再设置硬编码样式
         
         layout.addWidget(self.project_tree)
         print(f"[LeftPanel] UI 初始化完成")
@@ -214,20 +190,26 @@ class CenterPanel(BaseWidget):
         layout.addWidget(self.tab_widget)
 
         # 默认欢迎页
-        welcome = QLabel(
+        self._welcome_widget = QLabel(
             "🎮 Game Master Agent IDE\n\n"
             "欢迎使用 Agent 集成开发环境\n\n"
             "请通过 File > New Agent Project 创建新项目\n"
             "或 File > Open 打开已有项目"
         )
-        welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        welcome.setStyleSheet("font-size: 16px; color: #858585;")
-        self.tab_widget.addTab(welcome, "Welcome")
+        self._welcome_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._welcome_widget.setStyleSheet("font-size: 16px; color: #858585;")
+        self.tab_widget.addTab(self._welcome_widget, "Welcome")
 
         # 编辑器标签页（默认隐藏，打开项目后显示）
         self._graph_editor = None
         self._prompt_editor = None
         self._tool_manager = None
+
+    def remove_welcome_tab(self) -> None:
+        """移除欢迎标签页"""
+        if self._welcome_widget and self.tab_widget.indexOf(self._welcome_widget) >= 0:
+            self.tab_widget.removeTab(self.tab_widget.indexOf(self._welcome_widget))
+            self._welcome_widget = None
 
     def _on_tab_close(self, index: int) -> None:
         """关闭标签页"""
@@ -237,6 +219,29 @@ class CenterPanel(BaseWidget):
         
         # 获取要关闭的 widget
         widget = self.tab_widget.widget(index)
+        
+        # 检查 widget 是否有效
+        if widget is None or not isinstance(widget, QWidget):
+            return
+        
+        # 检查是否有未保存的更改
+        if hasattr(widget, '_is_modified') and widget._is_modified:
+            from pathlib import Path
+            filename = Path(widget._file_path).name if hasattr(widget, '_file_path') else "文件"
+            reply = QMessageBox.question(
+                self, "未保存的更改",
+                f"'{filename}' 有未保存的更改。是否保存？",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+            if reply == QMessageBox.StandardButton.Save:
+                # 保存前再次验证 widget 仍然有效且未被销毁
+                if not widget or widget.isDestroyed():
+                    return  # widget 已被销毁，不执行关闭
+                if not self._save_editor_widget(widget):
+                    return  # 保存失败，不关闭
+            elif reply == QMessageBox.StandardButton.Cancel:
+                return  # 取消关闭
         
         # 从标签页中移除
         self.tab_widget.removeTab(index)
@@ -478,11 +483,34 @@ class MainWindow(QMainWindow):
         # 应用主题
         theme_manager.apply("dark")
 
-        # 启动 HTTP 控制服务器
-        self._start_http_server()
+    def _load_project_to_editors(self, project_path: Path) -> None:
+        """将当前项目加载到所有编辑器（统一入口）"""
+        from presentation.project.manager import project_manager
+        
+        # 关闭欢迎标签页
+        self.center_panel.remove_welcome_tab()
 
-        # 检查是否有已打开的项目，自动加载
-        self._load_current_project_if_exists()
+        # 加载图编辑器
+        graph = project_manager.load_graph()
+        self.center_panel.show_graph_editor(graph)
+
+        # 加载 Prompt 编辑器
+        prompts = {}
+        for name in project_manager.list_prompts():
+            prompts[name] = project_manager.load_prompt(name)
+        self.center_panel.show_prompt_editor(prompts)
+
+        # 加载工具管理器
+        self.center_panel.show_tool_manager(self.right_panel)
+
+        # 加载左侧资源树
+        self.left_panel.setVisible(True)
+        self.left_panel.load_project_tree(str(project_path))
+
+        # 更新 Feature 状态
+        from feature.registry import feature_registry
+        features = feature_registry.list_features()
+        self.right_panel.update_feature_status(features)
 
         logger.info("主窗口初始化完成")
 
@@ -493,37 +521,16 @@ class MainWindow(QMainWindow):
         if project_manager._current_project and project_manager._project_path:
             logger.info(f"检测到已打开的项目: {project_manager._current_project.name}")
             try:
-                # 关闭欢迎标签页
-                if self.center_panel.tab_widget.count() > 0:
-                    welcome_widget = self.center_panel.tab_widget.widget(0)
-                    if isinstance(welcome_widget, QLabel):
-                        self.center_panel.tab_widget.removeTab(0)
-
-                # 加载图编辑器
-                graph = project_manager.load_graph()
-                self.center_panel.show_graph_editor(graph)
-
-                # 加载 Prompt 编辑器
-                prompts = {}
-                for name in project_manager.list_prompts():
-                    prompts[name] = project_manager.load_prompt(name)
-                self.center_panel.show_prompt_editor(prompts)
-
-                # 加载工具管理器
-                self.center_panel.show_tool_manager(self.right_panel)
-
-                # 加载左侧资源树
-                self.left_panel.load_project_tree(str(project_manager._project_path))
-
-                self.statusBar().showMessage(f"项目已加载: {project_manager._current_project.name}", 3000)
+                self._load_project_to_editors(project_manager._project_path)
+                self._show_message(f"项目已加载: {project_manager._current_project.name}", 3000)
                 logger.info(f"项目加载完成: {project_manager._current_project.name}")
             except Exception as e:
                 logger.error(f"加载项目失败: {e}")
-                self.statusBar().showMessage(f"加载项目失败: {e}", 3000)
+                self._show_message(f"加载项目失败: {e}", 3000)
     
     def _do_create_project(self, name: str, template: str, directory: str, project_root: str):
         """在主线程中创建新项目"""
-        print(f"[MainWindow] 开始创建项目: {name} (模板: {template})")
+        logger.info(f"开始创建项目: {name} (模板: {template})")
         from presentation.project.manager import project_manager
         from pathlib import Path
 
@@ -532,88 +539,52 @@ class MainWindow(QMainWindow):
             full_dir = Path(project_root) / directory
             full_dir.mkdir(parents=True, exist_ok=True)
             
-            print(f"[MainWindow] 调用 project_manager.create_project...")
             path = project_manager.create_project(name, template=template, directory=str(full_dir))
-            print(f"[MainWindow] 项目已创建: {path}")
+            logger.info(f"项目已创建: {path}")
             
             # 自动打开项目
-            self._do_open_project(str(path.relative_to(Path(project_root))), project_root)
+            try:
+                rel_path = str(path.relative_to(Path(project_root)))
+            except ValueError:
+                rel_path = str(path)  # fallback 使用绝对路径
+            self._do_open_project(rel_path, project_root)
             
-            self.statusBar().showMessage(f"项目已创建并打开: {name}", 3000)
-            print(f"[MainWindow] 项目创建完成!")
+            self._show_message(f"项目已创建并打开: {name}", 3000)
+            logger.info(f"项目创建完成!")
         except Exception as e:
             import traceback
-            self.statusBar().showMessage(f"创建项目失败: {str(e)}", 3000)
-            print(f"[MainWindow] Error: {e}")
-            print(traceback.format_exc())
+            self._show_message(f"创建项目失败: {str(e)}", 3000)
+            logger.error(f"创建项目失败: {e}")
+            logger.error(traceback.format_exc())
 
     def _do_open_project(self, project_path: str, project_root: str):
         """在主线程中打开项目"""
-        print(f"[MainWindow] 开始打开项目: {project_path}")
+        logger.info(f"开始打开项目: {project_path}")
         from presentation.project.manager import project_manager
         from pathlib import Path
 
         full_path = Path(project_root) / project_path
-        print(f"[MainWindow] 完整路径: {full_path}")
         
         if not full_path.exists():
-            print(f"[MainWindow] 项目不存在!")
-            self.statusBar().showMessage(f"项目不存在: {project_path}", 3000)
+            logger.warning(f"项目不存在: {full_path}")
+            self._show_message(f"项目不存在: {project_path}", 3000)
             return
 
         try:
             # 打开项目
-            print(f"[MainWindow] 调用 project_manager.open_project...")
             config = project_manager.open_project(full_path)
-            print(f"[MainWindow] 项目已打开: {config.name}")
+            logger.info(f"项目已打开: {config.name}")
             
-            # 关闭欢迎标签页（第一个标签页）
-            print(f"[MainWindow] 关闭欢迎标签页...")
-            if self.center_panel.tab_widget.count() > 0:
-                welcome_widget = self.center_panel.tab_widget.widget(0)
-                if isinstance(welcome_widget, QLabel):
-                    self.center_panel.tab_widget.removeTab(0)
-                    print(f"[MainWindow] 欢迎标签页已关闭")
+            # 加载编辑器（使用统一入口）
+            self._load_project_to_editors(full_path)
 
-            # 加载编辑器
-            print(f"[MainWindow] 加载图编辑器...")
-            graph = project_manager.load_graph()
-            self.center_panel.show_graph_editor(graph)
-            print(f"[MainWindow] 图编辑器已加载: {len(graph.get('nodes', []))} 节点")
-
-            print(f"[MainWindow] 加载 Prompt 编辑器...")
-            prompts = {}
-            for name in project_manager.list_prompts():
-                prompts[name] = project_manager.load_prompt(name)
-            self.center_panel.show_prompt_editor(prompts)
-            print(f"[MainWindow] Prompt 编辑器已加载: {len(prompts)} prompts")
-
-            print(f"[MainWindow] 加载工具管理器...")
-            self.center_panel.show_tool_manager(self.right_panel)
-            print(f"[MainWindow] 工具管理器已加载")
-
-            # 加载左侧资源树
-            print(f"[MainWindow] 加载资源树...")
-            print(f"[MainWindow] left_panel 可见: {self.left_panel.isVisible()}")
-            print(f"[MainWindow] left_panel 宽度: {self.left_panel.width()}")
-            self.left_panel.setVisible(True)  # 确保面板可见
-            self.left_panel.load_project_tree(str(full_path))
-            print(f"[MainWindow] 资源树已加载")
-            
-            # 更新右侧面板的 Feature 状态
-            print(f"[MainWindow] 更新 Feature 状态...")
-            from feature.registry import feature_registry
-            features = feature_registry.list_features()
-            self.right_panel.update_feature_status(features)
-            print(f"[MainWindow] Feature 状态已更新: {len(features)} 个")
-
-            self.statusBar().showMessage(f"项目已打开: {config.name}", 3000)
-            print(f"[MainWindow] 项目打开完成!")
+            self._show_message(f"项目已打开: {config.name}", 3000)
+            logger.info(f"项目打开完成!")
         except Exception as e:
             import traceback
-            self.statusBar().showMessage(f"打开项目失败: {str(e)}", 3000)
-            print(f"[MainWindow] Error: {e}")
-            print(traceback.format_exc())
+            self._show_message(f"打开项目失败: {str(e)}", 3000)
+            logger.error(f"打开项目失败: {e}")
+            logger.error(traceback.format_exc())
 
     def _setup_ui(self) -> None:
         """设置三栏布局"""
@@ -679,21 +650,14 @@ class MainWindow(QMainWindow):
 
         # Edit 菜单
         edit_menu = menubar.addMenu("编辑(&E)")
-        undo_action = QAction("撤销(&Z)", self)
-        undo_action.setShortcut("Ctrl+Z")
-        edit_menu.addAction(undo_action)
-
-        redo_action = QAction("重做(&Y)", self)
-        redo_action.setShortcut("Ctrl+Y")
-        edit_menu.addAction(redo_action)
+        # 不添加 Ctrl+Z 和 Ctrl+Y 的 action，让 QTextEdit 等控件使用默认的撤销/重做行为
 
         # View 菜单
         view_menu = menubar.addMenu("视图(&V)")
 
         toggle_left = QAction("左侧面板", self, checkable=True, checked=True)
-        toggle_left.triggered.connect(
-            lambda checked: self.left_panel.setVisible(checked)
-        )
+        toggle_left.setShortcut("Ctrl+B")
+        toggle_left.triggered.connect(self._toggle_sidebar)
         view_menu.addAction(toggle_left)
 
         toggle_right = QAction("右侧面板", self, checkable=True, checked=True)
@@ -701,6 +665,32 @@ class MainWindow(QMainWindow):
             lambda checked: self.right_panel.setVisible(checked)
         )
         view_menu.addAction(toggle_right)
+
+        view_menu.addSeparator()
+
+        # 标签页快捷键
+        next_tab_action = QAction("下一个标签页", self)
+        next_tab_action.setShortcut("Ctrl+Tab")
+        next_tab_action.triggered.connect(lambda: self._switch_tab(1))
+        view_menu.addAction(next_tab_action)
+
+        prev_tab_action = QAction("上一个标签页", self)
+        prev_tab_action.setShortcut("Ctrl+Shift+Tab")
+        prev_tab_action.triggered.connect(lambda: self._switch_tab(-1))
+        view_menu.addAction(prev_tab_action)
+
+        close_tab_action = QAction("关闭标签页", self)
+        close_tab_action.setShortcut("Ctrl+W")
+        close_tab_action.triggered.connect(self._on_close_current_tab)
+        view_menu.addAction(close_tab_action)
+
+        view_menu.addSeparator()
+
+        # 全屏切换
+        fullscreen_action = QAction("全屏(&F)", self)
+        fullscreen_action.setShortcut("F11")
+        fullscreen_action.triggered.connect(self._toggle_fullscreen)
+        view_menu.addAction(fullscreen_action)
 
         view_menu.addSeparator()
 
@@ -744,9 +734,23 @@ class MainWindow(QMainWindow):
 
         # Help 菜单
         help_menu = menubar.addMenu("帮助(&H)")
+
+        shortcut_action = QAction("快捷键列表(&K)", self)
+        shortcut_action.setShortcut("Ctrl+Shift+/")
+        shortcut_action.triggered.connect(self._show_shortcuts)
+        help_menu.addAction(shortcut_action)
+
+        help_menu.addSeparator()
+
         about_action = QAction("关于(&A)", self)
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
+
+        # 命令面板（不显示在菜单中，只绑定快捷键）
+        command_palette_action = QAction("命令面板", self)
+        command_palette_action.setShortcut("Ctrl+Shift+P")
+        command_palette_action.triggered.connect(self._show_command_palette)
+        self.addAction(command_palette_action)
 
     def _setup_toolbar(self) -> None:
         """设置工具栏"""
@@ -755,15 +759,40 @@ class MainWindow(QMainWindow):
         toolbar = self.addToolBar("主工具栏")
         toolbar.setMovable(False)
 
-        toolbar.addAction("📂 新建", self._on_new_project)
-        toolbar.addAction("📁 打开", self._on_open_project)
-        toolbar.addAction("💾 保存", self._on_save)
+        # 使用系统标准图标替代 Emoji
+        from PyQt6.QtWidgets import QStyle
+
+        new_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder), "新建", self)
+        new_action.triggered.connect(self._on_new_project)
+        toolbar.addAction(new_action)
+
+        open_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon), "打开", self)
+        open_action.triggered.connect(self._on_open_project)
+        toolbar.addAction(open_action)
+
+        save_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "保存", self)
+        save_action.triggered.connect(self._on_save)
+        toolbar.addAction(save_action)
+
         toolbar.addSeparator()
-        toolbar.addAction("▶ 运行", self._on_run_agent)
-        toolbar.addAction("⏹ 停止", self._on_stop_agent)
+
+        run_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay), "运行", self)
+        run_action.triggered.connect(self._on_run_agent)
+        toolbar.addAction(run_action)
+
+        stop_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop), "停止", self)
+        stop_action.triggered.connect(self._on_stop_agent)
+        toolbar.addAction(stop_action)
+
         toolbar.addSeparator()
-        toolbar.addAction("🌙 Dark", lambda: theme_manager.apply("dark"))
-        toolbar.addAction("☀ Light", lambda: theme_manager.apply("light"))
+
+        dark_action = QAction("Dark", self)
+        dark_action.triggered.connect(lambda: theme_manager.apply("dark"))
+        toolbar.addAction(dark_action)
+
+        light_action = QAction("Light", self)
+        light_action.triggered.connect(lambda: theme_manager.apply("light"))
+        toolbar.addAction(light_action)
         
         # 添加弹性空间，将状态信息推到右侧
         spacer = QWidget()
@@ -789,6 +818,12 @@ class MainWindow(QMainWindow):
         # 隐藏状态栏，使用顶部工具栏显示状态
         statusbar.setMaximumHeight(0)
         statusbar.hide()
+
+    def _show_message(self, msg: str, duration: int = 3000) -> None:
+        """统一消息显示 — 使用工具栏状态标签"""
+        self._toolbar_status_agent.setText(f"💬 {msg}")
+        if duration > 0:
+            QTimer.singleShot(duration, lambda: self._toolbar_status_agent.setText("🤖 未加载"))
 
     def _setup_eventbus(self) -> None:
         """设置 EventBus 订阅"""
@@ -827,66 +862,56 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             data = dialog.get_project_data()
             if not data["name"]:
-                self.statusBar().showMessage("项目名称不能为空", 3000)
+                self._show_message("项目名称不能为空", 3000)
                 return
-            try:
-                from presentation.project.manager import project_manager
-                path = project_manager.create_project(
-                    name=data["name"],
-                    template=data["template"],
-                    description=data["description"],
-                )
-                project_manager.open_project(path)
-
-                # 加载到编辑器
-                graph = project_manager.load_graph()
-                self.center_panel.show_graph_editor(graph)
-
-                prompts = {}
-                for name in project_manager.list_prompts():
-                    prompts[name] = project_manager.load_prompt(name)
-                self.center_panel.show_prompt_editor(prompts)
-
-                self.center_panel.show_tool_manager(self.right_panel)
-
-                # 加载左侧资源树
-                self.left_panel.load_project_tree(str(path))
-
-                self.statusBar().showMessage(f"项目已创建: {data['name']}", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"创建项目失败: {e}")
+            # 通过信号触发统一处理
+            self.create_project_requested.emit(
+                data["name"], data["template"], data.get("description", ""), ""
+            )
 
     def _on_open_project(self) -> None:
         """打开项目"""
         from PyQt6.QtWidgets import QFileDialog
-        path = QFileDialog.getExistingDirectory(
-            self, "打开 Agent 项目", "",
-        )
+        path = QFileDialog.getExistingDirectory(self, "打开 Agent 项目", "")
         if path:
-            try:
-                from presentation.project.manager import project_manager
-                config = project_manager.open_project(path)
-
-                graph = project_manager.load_graph()
-                self.center_panel.show_graph_editor(graph)
-
-                prompts = {}
-                for name in project_manager.list_prompts():
-                    prompts[name] = project_manager.load_prompt(name)
-                self.center_panel.show_prompt_editor(prompts)
-
-                self.center_panel.show_tool_manager(self.right_panel)
-
-                # 加载左侧资源树
-                self.left_panel.load_project_tree(path)
-
-                self.statusBar().showMessage(f"项目已打开: {config.name}", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"打开项目失败: {e}")
+            # 通过信号触发统一处理
+            self.open_project_requested.emit(path, "")
 
     def _on_save(self) -> None:
-        """保存"""
-        self.statusBar().showMessage("项目已保存", 2000)
+        """保存当前项目"""
+        from presentation.project.manager import project_manager
+
+        # 首先尝试保存当前文本编辑器
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, '_file_path') and hasattr(current, '_is_modified'):
+            if current._is_modified:
+                self._save_current_editor()
+            return
+
+        if not project_manager.is_open:
+            self._show_message("没有打开的项目")
+            return
+
+        try:
+            # 保存图编辑器
+            if self.center_panel._graph_editor:
+                graph_data = self.center_panel._graph_editor.get_graph()
+                project_manager.save_graph(graph_data)
+
+            # 保存 Prompt 编辑器
+            if self.center_panel._prompt_editor:
+                prompts = self.center_panel._prompt_editor.get_prompts()
+                for name, content in prompts.items():
+                    project_manager.save_prompt(name, content)
+
+            # 保存项目元数据
+            project_manager.save_project()
+
+            self._show_message(f"项目已保存: {project_manager.current_project.name}")
+            logger.info(f"项目已保存: {project_manager.current_project.name}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存项目时出错: {e}")
+            logger.error(f"保存项目失败: {e}")
 
     def _on_file_open(self, file_path: str) -> None:
         """打开项目浏览器中的文件"""
@@ -894,7 +919,7 @@ class MainWindow(QMainWindow):
         path = Path(file_path)
         
         if not path.exists():
-            self.statusBar().showMessage(f"文件不存在: {file_path}", 3000)
+            self._show_message(f"文件不存在: {file_path}", 3000)
             return
         
         try:
@@ -923,15 +948,16 @@ class MainWindow(QMainWindow):
                 # 其他文件 — 在文本编辑器中打开
                 self._open_text_editor(file_path)
                 
-            self.statusBar().showMessage(f"已打开: {path.name}", 2000)
+            self._show_message(f"已打开: {path.name}", 2000)
             
         except Exception as e:
-            self.statusBar().showMessage(f"打开文件失败: {e}", 3000)
+            self._show_message(f"打开文件失败: {e}", 3000)
     
     def _open_text_editor(self, file_path: str) -> None:
         """在文本编辑器中打开文件"""
         from pathlib import Path
         from PyQt6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
+        from PyQt6.QtCore import pyqtSignal
         
         path = Path(file_path)
         
@@ -945,42 +971,207 @@ class MainWindow(QMainWindow):
         # 创建新的文本编辑器
         editor = QTextEdit()
         editor._file_path = file_path
+        editor._original_content = ""  # 保存原始内容用于比较
+        editor._is_modified = False
         
         # 读取文件内容
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             editor.setPlainText(content)
+            editor._original_content = content
         except Exception as e:
             editor.setPlainText(f"读取文件失败: {e}")
         
-        # 设置只读（临时）
-        editor.setReadOnly(True)
+        # 可编辑
+        editor.setReadOnly(False)
         
-        # 设置样式
-        editor.setStyleSheet("""
-            QTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: none;
-                font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 13px;
-                padding: 10px;
-            }
-        """)
+        # 监听文本变化
+        def on_text_changed():
+            current = editor.toPlainText()
+            was_modified = editor._is_modified
+            editor._is_modified = (current != editor._original_content)
+            if editor._is_modified != was_modified:
+                self._update_tab_title(editor, path.name, editor._is_modified)
+        
+        editor.textChanged.connect(on_text_changed)
+        
+        # 只保留字体设置，颜色由全局 QSS 控制
+        editor.setStyleSheet("font-family: 'Consolas', 'Monaco', 'Courier New', monospace;")
         
         # 添加到标签页
         tab_name = f"📄 {path.name}"
         index = self.center_panel.tab_widget.addTab(editor, tab_name)
         self.center_panel.tab_widget.setCurrentIndex(index)
+    
+    def _update_tab_title(self, editor: QTextEdit, filename: str, modified: bool) -> None:
+        """更新标签页标题（显示修改标记）"""
+        for i in range(self.center_panel.tab_widget.count()):
+            if self.center_panel.tab_widget.widget(i) == editor:
+                title = f"📄 {filename}{'*' if modified else ''}"
+                self.center_panel.tab_widget.setTabText(i, title)
+                break
+    
+    def _save_current_editor(self) -> bool:
+        """保存当前编辑器的内容"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if not current or not hasattr(current, '_file_path'):
+            return False
+        return self._save_editor_widget(current)
+    
+    def _save_editor_widget(self, widget: QWidget) -> bool:
+        """保存指定编辑器 widget 的内容
+        
+        Args:
+            widget: 要保存的编辑器 widget
+            
+        Returns:
+            保存是否成功
+        """
+        # 验证 widget 有效
+        if not widget or not isinstance(widget, QWidget):
+            return False
+        
+        if not hasattr(widget, '_file_path'):
+            return False
+        
+        file_path = widget._file_path
+        content = widget.toPlainText()
+        
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            widget._original_content = content
+            widget._is_modified = False
+            
+            # 更新标签标题
+            from pathlib import Path
+            self._update_tab_title(widget, Path(file_path).name, False)
+            
+            self._show_message(f"已保存: {Path(file_path).name}", 2000)
+            return True
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存文件时出错: {e}")
+            return False
+
+    def _on_close_current_tab(self) -> None:
+        """关闭当前标签页"""
+        index = self.center_panel.tab_widget.currentIndex()
+        if index > 0:  # 不关闭第一个标签页（如果有欢迎页的话）
+            self.center_panel._on_tab_close(index)
+
+    def _switch_tab(self, direction: int) -> None:
+        """切换标签页（direction: 1=下一个, -1=上一个）"""
+        count = self.center_panel.tab_widget.count()
+        if count <= 1:
+            return
+        current = self.center_panel.tab_widget.currentIndex()
+        next_index = (current + direction) % count
+        self.center_panel.tab_widget.setCurrentIndex(next_index)
+
+    def _toggle_sidebar(self) -> None:
+        """切换左侧面板可见性"""
+        self.left_panel.setVisible(not self.left_panel.isVisible())
+
+    def _toggle_fullscreen(self) -> None:
+        """切换全屏"""
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
 
     def _on_run_agent(self) -> None:
         """运行 Agent"""
-        self.statusBar().showMessage("启动 Agent... (Step 5 实现)", 3000)
+        from presentation.project.manager import project_manager
+        from foundation.config import settings
+        from feature.ai.gm_agent import GMAgent
+
+        if not project_manager.is_open:
+            self._show_message("请先打开一个项目")
+            return
+
+        if not settings.deepseek_api_key:
+            QMessageBox.warning(self, "配置缺失",
+                "请先在 设置 > API设置 中配置 API Key")
+            self._on_settings()
+            return
+
+        # 显示输入对话框获取玩家输入
+        from PyQt6.QtWidgets import QInputDialog
+        user_input, ok = QInputDialog.getText(
+            self, "运行 Agent", "请输入玩家指令:",
+            text="我要探索幽暗森林"
+        )
+        if not ok or not user_input:
+            return
+
+        # 创建 Agent 实例并运行
+        self._show_message("Agent 运行中...")
+        self._current_agent = GMAgent(world_id=1)
+        
+        # 在后台线程中运行 Agent
+        import asyncio
+        from PyQt6.QtCore import QThread, pyqtSignal
+        
+        class AgentThread(QThread):
+            finished = pyqtSignal(dict)
+            error = pyqtSignal(str)
+            
+            def __init__(self, agent, user_input):
+                super().__init__()
+                self.agent = agent
+                self.user_input = user_input
+            
+            def run(self):
+                try:
+                    # 使用 asyncio 运行异步方法
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    result = loop.run_until_complete(
+                        self.agent.run(self.user_input)
+                    )
+                    loop.close()
+                    self.finished.emit(result)
+                except Exception as e:
+                    self.error.emit(str(e))
+        
+        self._agent_thread = AgentThread(self._current_agent, user_input)
+        self._agent_thread.finished.connect(self._on_agent_finished)
+        self._agent_thread.error.connect(self._on_agent_error)
+        self._agent_thread.start()
+
+    def _on_agent_finished(self, result: dict) -> None:
+        """Agent 运行完成回调"""
+        status = result.get("status", "unknown")
+        if status == "success":
+            narrative = result.get("narrative", "")
+            turn = result.get("turn_count", 0)
+            self._show_message(f"Agent 回合 {turn} 完成", 3000)
+            
+            # 显示叙事结果（简单弹窗）
+            QMessageBox.information(
+                self, "Agent 运行结果",
+                f"<h3>回合 {turn}</h3>"
+                f"<p>{narrative[:500]}{'...' if len(narrative) > 500 else ''}</p>"
+            )
+        else:
+            error = result.get("error", "未知错误")
+            self._show_message(f"Agent 运行失败: {error}", 5000)
+            QMessageBox.critical(self, "Agent 错误", f"运行失败: {error}")
+
+    def _on_agent_error(self, error: str) -> None:
+        """Agent 运行错误回调"""
+        self._show_message(f"Agent 运行错误: {error}", 5000)
+        QMessageBox.critical(self, "Agent 错误", f"运行失败: {error}")
 
     def _on_stop_agent(self) -> None:
         """停止 Agent"""
-        self.statusBar().showMessage("停止 Agent", 2000)
+        if hasattr(self, '_agent_thread') and self._agent_thread.isRunning():
+            self._agent_thread.terminate()
+            self._agent_thread.wait()
+            self._show_message("Agent 已停止")
+        else:
+            self._show_message("Agent 未在运行")
 
     def _show_ops_panel(self, panel_type: str) -> None:
         """显示运营工具面板"""
@@ -1025,7 +1216,215 @@ class MainWindow(QMainWindow):
         from presentation.dialogs.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self)
         if dialog.exec():
-            self.statusBar().showMessage("设置已保存，重启后生效", 3000)
+            self._show_message("设置已保存，重启后生效", 3000)
+
+    def _show_command_palette(self) -> None:
+        """显示命令面板（VS Code 风格）"""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QLineEdit, QListWidget,
+            QListWidgetItem, QLabel, QHBoxLayout
+        )
+        from PyQt6.QtCore import Qt, QTimer
+        from PyQt6.QtGui import QKeyEvent
+        
+        class CommandPaletteDialog(QDialog):
+            def __init__(self, parent=None, main_window=None):
+                super().__init__(parent)
+                self.main_window = main_window
+                self.setWindowTitle("命令面板")
+                self.setMinimumWidth(600)
+                self.setMaximumHeight(500)
+                
+                # 无边框、置顶
+                self.setWindowFlags(
+                    Qt.WindowType.Dialog |
+                    Qt.WindowType.FramelessWindowHint |
+                    Qt.WindowType.WindowStaysOnTopHint
+                )
+                
+                self._setup_ui()
+                self._setup_commands()
+                
+                # 居中显示
+                if parent:
+                    self.move(
+                        parent.x() + (parent.width() - self.width()) // 2,
+                        parent.y() + 100
+                    )
+            
+            def _setup_ui(self):
+                layout = QVBoxLayout(self)
+                layout.setContentsMargins(12, 12, 12, 12)
+                layout.setSpacing(8)
+                
+                # 搜索框
+                self.search_box = QLineEdit()
+                self.search_box.setPlaceholderText("> 输入命令...")
+                self.search_box.textChanged.connect(self._filter_commands)
+                layout.addWidget(self.search_box)
+                
+                # 命令列表
+                self.command_list = QListWidget()
+                self.command_list.itemActivated.connect(self._execute_command)
+                self.command_list.itemClicked.connect(self._execute_command)
+                layout.addWidget(self.command_list)
+                
+                # 提示
+                hint = QLabel("↑↓ 选择 · Enter 执行 · Esc 关闭")
+                hint.setStyleSheet("color: #858585; font-size: 11px;")
+                hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                layout.addWidget(hint)
+                
+                # 聚焦搜索框
+                QTimer.singleShot(0, self.search_box.setFocus)
+            
+            def _setup_commands(self):
+                """设置可用命令列表"""
+                self.commands = [
+                    ("📁 新建项目", "new_project", "Ctrl+N"),
+                    ("📂 打开项目", "open_project", "Ctrl+O"),
+                    ("💾 保存", "save", "Ctrl+S"),
+                    ("🔧 图编辑器", "show_graph", ""),
+                    ("📝 Prompt 管理器", "show_prompt", ""),
+                    ("🔨 工具管理器", "show_tools", ""),
+                    ("▶️ 运行 Agent", "run_agent", "F5"),
+                    ("⏹️ 停止 Agent", "stop_agent", "Shift+F5"),
+                    ("🔍 运行时调试器", "debugger", ""),
+                    ("📊 评估工作台", "evaluator", ""),
+                    ("📖 知识库编辑器", "knowledge", ""),
+                    ("🔒 安全护栏", "safety", ""),
+                    ("🤖 多 Agent 编排", "multi_agent", ""),
+                    ("📋 日志追踪", "logger", ""),
+                    ("🚀 部署管理", "deploy", ""),
+                    ("⚙️ 设置", "settings", "Ctrl+,"),
+                    ("🎨 Dark 主题", "theme_dark", ""),
+                    ("🎨 Light 主题", "theme_light", ""),
+                    ("🖥️ 全屏切换", "fullscreen", "F11"),
+                    ("❓ 快捷键列表", "shortcuts", "Ctrl+Shift+/"),
+                    ("ℹ️ 关于", "about", ""),
+                ]
+                
+                for name, cmd, shortcut in self.commands:
+                    display = f"{name}"
+                    if shortcut:
+                        display += f"  [{shortcut}]"
+                    item = QListWidgetItem(display)
+                    item.setData(Qt.ItemDataRole.UserRole, cmd)
+                    self.command_list.addItem(item)
+                
+                if self.command_list.count() > 0:
+                    self.command_list.setCurrentRow(0)
+            
+            def _filter_commands(self, text: str):
+                """过滤命令列表"""
+                text = text.lower()
+                for i in range(self.command_list.count()):
+                    item = self.command_list.item(i)
+                    cmd_name = self.commands[i][0].lower()
+                    cmd_id = self.commands[i][1].lower()
+                    match = text == "" or text in cmd_name or text in cmd_id
+                    item.setHidden(not match)
+                
+                # 选中第一个可见项
+                for i in range(self.command_list.count()):
+                    if not self.command_list.item(i).isHidden():
+                        self.command_list.setCurrentRow(i)
+                        break
+            
+            def _execute_command(self, item=None):
+                """执行选中的命令"""
+                if item is None:
+                    item = self.command_list.currentItem()
+                if not item:
+                    return
+                
+                cmd = item.data(Qt.ItemDataRole.UserRole)
+                self.close()
+                
+                if self.main_window:
+                    self.main_window._execute_palette_command(cmd)
+            
+            def keyPressEvent(self, event: QKeyEvent):
+                """处理键盘事件"""
+                if event.key() == Qt.Key.Key_Escape:
+                    self.close()
+                elif event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+                    self._execute_command()
+                elif event.key() == Qt.Key.Key_Down:
+                    self._move_selection(1)
+                elif event.key() == Qt.Key.Key_Up:
+                    self._move_selection(-1)
+                else:
+                    super().keyPressEvent(event)
+            
+            def _move_selection(self, direction: int):
+                """移动选择"""
+                current = self.command_list.currentRow()
+                count = self.command_list.count()
+                
+                # 找到下一个可见项
+                for i in range(1, count + 1):
+                    new_idx = (current + direction * i) % count
+                    if not self.command_list.item(new_idx).isHidden():
+                        self.command_list.setCurrentRow(new_idx)
+                        break
+        
+        # 显示命令面板
+        palette = CommandPaletteDialog(self, self)
+        palette.exec()
+    
+    def _execute_palette_command(self, cmd: str):
+        """执行命令面板的命令"""
+        handlers = {
+            "new_project": self._on_new_project,
+            "open_project": self._on_open_project,
+            "save": self._on_save,
+            "show_graph": lambda: self.center_panel.show_graph_editor(),
+            "show_prompt": lambda: self.center_panel.show_prompt_editor(),
+            "show_tools": lambda: self.center_panel.show_tool_manager(self.right_panel),
+            "run_agent": self._on_run_agent,
+            "stop_agent": self._on_stop_agent,
+            "debugger": lambda: self._show_ops_panel("debugger"),
+            "evaluator": lambda: self._show_ops_panel("evaluator"),
+            "knowledge": lambda: self._show_ops_panel("knowledge"),
+            "safety": lambda: self._show_ops_panel("safety"),
+            "multi_agent": lambda: self._show_ops_panel("multi_agent"),
+            "logger": lambda: self._show_ops_panel("logger"),
+            "deploy": lambda: self._show_ops_panel("deploy"),
+            "settings": self._on_settings,
+            "theme_dark": lambda: theme_manager.apply("dark"),
+            "theme_light": lambda: theme_manager.apply("light"),
+            "fullscreen": self._toggle_fullscreen,
+            "shortcuts": self._show_shortcuts,
+            "about": self._on_about,
+        }
+        
+        handler = handlers.get(cmd)
+        if handler:
+            handler()
+
+    def _show_shortcuts(self) -> None:
+        """显示快捷键列表"""
+        shortcuts = """
+        <h3>快捷键列表</h3>
+        <table cellpadding="5">
+        <tr><td><b>Ctrl+N</b></td><td>新建项目</td></tr>
+        <tr><td><b>Ctrl+O</b></td><td>打开项目</td></tr>
+        <tr><td><b>Ctrl+S</b></td><td>保存项目</td></tr>
+        <tr><td><b>Ctrl+W</b></td><td>关闭标签页</td></tr>
+        <tr><td><b>Ctrl+Tab</b></td><td>下一个标签页</td></tr>
+        <tr><td><b>Ctrl+Shift+Tab</b></td><td>上一个标签页</td></tr>
+        <tr><td><b>Ctrl+B</b></td><td>切换侧边栏</td></tr>
+        <tr><td><b>Ctrl+,</b></td><td>打开设置</td></tr>
+        <tr><td><b>Ctrl+Shift+P</b></td><td>命令面板</td></tr>
+        <tr><td><b>F5</b></td><td>运行 Agent</td></tr>
+        <tr><td><b>Shift+F5</b></td><td>停止 Agent</td></tr>
+        <tr><td><b>F11</b></td><td>全屏切换</td></tr>
+        <tr><td><b>Ctrl+Q</b></td><td>退出</td></tr>
+        <tr><td><b>Ctrl+Shift+/</b></td><td>显示快捷键列表</td></tr>
+        </table>
+        """
+        QMessageBox.information(self, "快捷键列表", shortcuts)
 
     def _on_about(self) -> None:
         """关于"""

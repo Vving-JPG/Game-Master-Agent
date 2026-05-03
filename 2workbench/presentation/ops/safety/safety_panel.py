@@ -238,8 +238,29 @@ class SafetyPanel(BaseWidget):
         logger.info(f"规则已保存: {rule.name}")
 
     def _on_level_changed(self, text: str) -> None:
+        """切换安全级别"""
         level_map = {"严格": SafetyLevel.STRICT, "标准": SafetyLevel.STANDARD, "宽松": SafetyLevel.RELAXED}
-        self._safety_level = level_map.get(text, SafetyLevel.STANDARD)
+        level = level_map.get(text, SafetyLevel.STANDARD)
+        self._safety_level = level
+
+        # 更新规则启用状态
+        for rule in self._rules:
+            rule.enabled = self._should_enable_rule(rule, level)
+
+        # 刷新列表显示
+        self._refresh_list()
+
+    def _should_enable_rule(self, rule: FilterRule, level: SafetyLevel) -> bool:
+        """根据安全级别决定是否启用规则"""
+        if rule.level == "strict":
+            if level == SafetyLevel.RELAXED:
+                return False  # RELAXED: 跳过 strict
+            # STANDARD 和 STRICT: 都应用 strict 规则
+        elif rule.level == "standard":
+            if level == SafetyLevel.RELAXED:
+                return False  # RELAXED: 也跳过 standard
+        # relaxed 规则在所有级别都应用
+        return True
 
     def _test_filter(self) -> None:
         """测试过滤"""

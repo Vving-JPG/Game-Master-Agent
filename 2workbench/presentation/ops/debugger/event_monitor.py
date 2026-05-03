@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QLineEdit, QLabel, QCheckBox,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QEvent
 
 from foundation.event_bus import event_bus, Event
 from foundation.logger import get_logger
@@ -27,6 +27,7 @@ class EventMonitor(BaseWidget):
         self._event_count = 0
         self._filter_text = ""
         self._paused = False
+        self._original_emit = None
         self._setup_ui()
         self._install_hook()
 
@@ -68,15 +69,27 @@ class EventMonitor(BaseWidget):
 
     def _install_hook(self) -> None:
         """安装 EventBus 钩子，捕获所有事件"""
-        original_emit = event_bus.emit
+        self._original_emit = event_bus.emit
+        event_bus.emit = self._hooked_emit
+        logger.info("EventBus 钩子已安装")
 
-        def hooked_emit(event: Event) -> list:
-            if not self._paused:
-                self._on_event(event)
-            return original_emit(event)
+    def _hooked_emit(self, event: Event) -> list:
+        """钩子函数：捕获事件并转发"""
+        if not self._paused:
+            self._on_event(event)
+        return self._original_emit(event)
 
-        event_bus.emit = hooked_emit
-        self._logger.info("EventBus 钩子已安装")
+    def _uninstall_hook(self) -> None:
+        """卸载 EventBus 钩子"""
+        if self._original_emit is not None:
+            event_bus.emit = self._original_emit
+            self._original_emit = None
+            logger.info("EventBus 钩子已卸载")
+
+    def closeEvent(self, event) -> None:
+        """关闭时恢复原始 emit"""
+        self._uninstall_hook()
+        super().closeEvent(event)
 
     def _on_event(self, event: Event) -> None:
         """处理捕获的事件"""

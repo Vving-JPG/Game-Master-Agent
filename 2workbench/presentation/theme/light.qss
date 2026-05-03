@@ -3,7 +3,7 @@
 QWidget {
     background-color: ${bg_primary};
     color: ${text_primary};
-    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Segoe UI", sans-serif;
     font-size: 13px;
     selection-background-color: ${accent};
     selection-color: ${text_bright};
@@ -90,10 +90,18 @@ QSplitter::handle {
     background-color: ${border};
 }
 QSplitter::handle:horizontal {
-    width: 1px;
+    width: 3px;
+}
+QSplitter::handle:horizontal:hover {
+    background-color: ${accent};
+    width: 5px;
 }
 QSplitter::handle:vertical {
-    height: 1px;
+    height: 3px;
+}
+QSplitter::handle:vertical:hover {
+    background-color: ${accent};
+    height: 5px;
 }
 
 /* 标签页 */

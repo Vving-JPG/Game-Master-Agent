@@ -11,7 +11,6 @@
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -108,6 +107,11 @@ class ConsoleOutput(QWidget):
         self._output.setTextCursor(cursor)
         scrollbar = self._output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+        # 更新计数
+        self._count += len(token)
+        if '\n' in token:
+            self._line_count += token.count('\n')
+        self._update_stats()
 
     def append_command(self, command: str, result: str) -> None:
         """命令执行记录"""
@@ -142,9 +146,10 @@ class VariableWatcher(QWidget):
         self._btn_refresh.clicked.connect(self.refresh)
         toolbar.addWidget(self._btn_refresh)
 
-        self._auto_refresh = StyledButton("自动刷新", style_type="ghost")
-        self._auto_refresh.setCheckable(True)
-        toolbar.addWidget(self._auto_refresh)
+        self._auto_refresh_btn = StyledButton("⏯ 自动刷新", style_type="ghost")
+        self._auto_refresh_btn.setCheckable(True)
+        self._auto_refresh_btn.toggled.connect(self._on_auto_refresh_toggled)
+        toolbar.addWidget(self._auto_refresh_btn)
 
         toolbar.addStretch()
         layout.addLayout(toolbar)
@@ -198,6 +203,23 @@ class VariableWatcher(QWidget):
         # 实际实现通过 EventBus 请求状态
         event_bus.emit(Event(type="ui.debugger.request_state", data={}))
 
+    def _on_auto_refresh_toggled(self, checked: bool) -> None:
+        """切换自动刷新"""
+        if checked:
+            self._refresh_timer = QTimer(self)
+            self._refresh_timer.timeout.connect(self._refresh_metrics)
+            self._refresh_timer.start(2000)  # 每 2 秒刷新
+            self._auto_refresh_btn.setText("⏸ 停止刷新")
+        else:
+            if hasattr(self, '_refresh_timer'):
+                self._refresh_timer.stop()
+            self._auto_refresh_btn.setText("⏯ 自动刷新")
+
+    def _refresh_metrics(self) -> None:
+        """刷新性能指标"""
+        # 从 EventBus 获取最新指标
+        self.refresh()
+
 
 class PerformanceMetrics(QWidget):
     """性能指标面板"""
@@ -213,28 +235,29 @@ class PerformanceMetrics(QWidget):
             "errors": 0,
         }
 
+    def _create_metric_label(self, text: str) -> QLabel:
+        """创建统一样式的指标标签"""
+        label = QLabel(text)
+        label.setStyleSheet("font-size: 18px; font-weight: bold; color: #858585;")
+        return label
+
     def _setup_ui(self) -> None:
         layout = QFormLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        self._turns_label = QLabel("0")
-        self._turns_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #569cd6;")
+        self._turns_label = self._create_metric_label("0")
         layout.addRow("🔄 总轮次:", self._turns_label)
 
-        self._tokens_label = QLabel("0")
-        self._tokens_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #4ec9b0;")
+        self._tokens_label = self._create_metric_label("0")
         layout.addRow("📊 总 Token:", self._tokens_label)
 
-        self._cost_label = QLabel("¥0.00")
-        self._cost_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #dcdcaa;")
+        self._cost_label = self._create_metric_label("¥0.00")
         layout.addRow("💰 总费用:", self._cost_label)
 
-        self._time_label = QLabel("0ms")
-        self._time_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ce9178;")
+        self._time_label = self._create_metric_label("0ms")
         layout.addRow("⏱ 平均响应:", self._time_label)
 
-        self._error_label = QLabel("0")
-        self._error_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #f44747;")
+        self._error_label = self._create_metric_label("0")
         layout.addRow("❌ 错误数:", self._error_label)
 
     def update_metrics(self, metrics: dict[str, Any]) -> None:

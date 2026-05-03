@@ -101,6 +101,19 @@ class ThemeManager:
                 qss = qss.replace(f"${{{key}}}", value)
             app.setStyleSheet(qss)
 
+        # 通知所有 StyledButton 刷新样式
+        self._refresh_styled_buttons()
+
+    def _refresh_styled_buttons(self) -> None:
+        """刷新所有 StyledButton 的样式"""
+        app = QApplication.instance()
+        if not app:
+            return
+        # 查找所有 StyledButton 并刷新
+        from presentation.widgets.styled_button import StyledButton
+        for widget in app.findChildren(StyledButton):
+            widget._apply_style()
+
     def get_color(self, name: str) -> str:
         """获取当前主题的颜色值"""
         palette = self.PALETTES.get(self._current_theme, {})

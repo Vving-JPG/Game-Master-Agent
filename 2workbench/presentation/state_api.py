@@ -126,26 +126,26 @@ class WidgetTreeSerializer:
         if hasattr(widget, 'text') and callable(getattr(widget, 'text')):
             try:
                 return str(widget.text())
-            except:
+            except Exception:
                 pass
 
         if hasattr(widget, 'toPlainText') and callable(getattr(widget, 'toPlainText')):
             try:
                 text = widget.toPlainText()
                 return text[:200] + "..." if len(text) > 200 else text
-            except:
+            except Exception:
                 pass
 
         if hasattr(widget, 'currentText') and callable(getattr(widget, 'currentText')):
             try:
                 return str(widget.currentText())
-            except:
+            except Exception:
                 pass
 
         if hasattr(widget, 'windowTitle') and callable(getattr(widget, 'windowTitle')):
             try:
                 return str(widget.windowTitle())
-            except:
+            except Exception:
                 pass
 
         return ""
@@ -702,9 +702,10 @@ class WindowsUIAutomationProvider:
                 "children": [],
             }
 
-            # 获取子元素
+            # 获取子元素（只获取直接子节点，避免递归重复）
             try:
-                children = element.FindAll(TreeScope_Descendants, uia.CreateTrueCondition())
+                from comtypes.gen.UIAutomationClient import TreeScope_Children
+                children = element.FindAll(TreeScope_Children, uia.CreateTrueCondition())
                 for i in range(min(children.Length, 50)):  # 限制子元素数量
                     child = children.GetElement(i)
                     child_info = self._serialize_element(child, uia, depth + 1, max_depth)
@@ -862,7 +863,7 @@ class StateAPI:
             if hasattr(widget, 'text') and callable(getattr(widget, 'text')):
                 try:
                     text = str(widget.text())
-                except:
+                except Exception:
                     pass
             if text != query["text"]:
                 match = False

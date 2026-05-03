@@ -10,9 +10,7 @@
 """
 from __future__ import annotations
 
-import asyncio
 import json
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -154,14 +152,64 @@ class EvalCaseEditor(QWidget):
             self._table.setItem(row, 1, QTableWidgetItem(case.input_text[:50]))
             self._table.setItem(row, 2, QTableWidgetItem(case.expected_output[:50]))
             self._table.setItem(row, 3, QTableWidgetItem(case.actual_output[:50] if case.actual_output else "-"))
-            score_item = QTableWidgetItem(f"{case.score:.1f}" if case.score else "-")
+            score_item = QTableWidgetItem(f"{case.score:.1f}" if case.score is not None else "-")
             self._table.setItem(row, 4, score_item)
-            latency_item = QTableWidgetItem(f"{case.latency_ms:.0f}ms" if case.latency_ms else "-")
+            latency_item = QTableWidgetItem(f"{case.latency_ms:.0f}ms" if case.latency_ms is not None else "-")
             self._table.setItem(row, 5, latency_item)
         self._count_label.setText(f"用例: {len(self._cases)}")
 
+    def refresh_table(self) -> None:
+        """公开方法：刷新表格（供外部调用）"""
+        self._refresh_table()
+
     def get_cases(self) -> list[EvalCase]:
         return list(self._cases)
+
+
+class EvalThread(QThread):
+    """评估执行线程"""
+    progress = pyqtSignal(int, int)  # current, total
+    result = pyqtSignal(object)       # EvalResult
+    error = pyqtSignal(str)           # 错误信息
+
+    def __init__(self, cases: list[EvalCase], model: str):
+        super().__init__()
+        self._cases = cases
+        self._model = model
+
+    def run(self):
+        try:
+            result = EvalResult(model=self._model, total_cases=len(self._cases))
+            total_score = 0.0
+            total_latency = 0.0
+            total_tokens = 0
+            passed = 0
+
+            for i, case in enumerate(self._cases):
+                # 模拟评估结果
+                case.model = self._model
+                case.latency_ms = 800 + i * 100  # 模拟延迟
+                case.tokens_used = 100 + i * 50
+                case.score = 7.0 + (i % 3)  # 模拟评分
+                case.actual_output = f"[模拟输出] 对 '{case.input_text[:20]}...' 的回复"
+
+                total_score += case.score
+                total_latency += case.latency_ms
+                total_tokens += case.tokens_used
+                if case.score >= 6:
+                    passed += 1
+
+                self.progress.emit(i + 1, len(self._cases))
+
+            result.avg_score = total_score / len(self._cases)
+            result.avg_latency_ms = total_latency / len(self._cases)
+            result.total_tokens = total_tokens
+            result.pass_rate = passed / len(self._cases)
+            result.cases = self._cases
+
+            self.result.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class EvalWorkbench(BaseWidget):
@@ -241,14 +289,13 @@ class EvalWorkbench(BaseWidget):
         layout.addWidget(splitter)
 
     def _run_eval(self) -> None:
-        """运行评估（同步模拟，实际使用 qasync）"""
+        """运行评估（使用后台线程）"""
         cases = self._case_editor.get_cases()
         if not cases:
             logger.warning("没有评估用例")
             return
 
         model = self._model_combo.currentText()
-        prompt_template = self._prompt_edit.toPlainText()
 
         self._running = True
         self._btn_run.setEnabled(False)
@@ -256,48 +303,39 @@ class EvalWorkbench(BaseWidget):
         self._progress.setMaximum(len(cases))
         self._progress.setValue(0)
 
-        # 同步模拟评估（实际应使用 qasync）
-        result = EvalResult(model=model, total_cases=len(cases))
-        total_score = 0.0
-        total_latency = 0.0
-        total_tokens = 0
-        passed = 0
+        # 创建评估线程
+        self._eval_thread = EvalThread(cases, model)
+        self._eval_thread.progress.connect(self._on_eval_progress)
+        self._eval_thread.result.connect(self._on_eval_complete)
+        self._eval_thread.error.connect(self._on_eval_error)
+        self._eval_thread.start()
 
-        for i, case in enumerate(cases):
-            # 模拟评估结果
-            case.model = model
-            case.latency_ms = 800 + i * 100  # 模拟延迟
-            case.tokens_used = 100 + i * 50
-            case.score = 7.0 + (i % 3)  # 模拟评分
-            case.actual_output = f"[模拟输出] 对 '{case.input_text[:20]}...' 的回复"
+    def _on_eval_progress(self, current: int, total: int) -> None:
+        """评估进度更新"""
+        self._progress.setValue(current)
 
-            total_score += case.score
-            total_latency += case.latency_ms
-            total_tokens += case.tokens_used
-            if case.score >= 6:
-                passed += 1
-
-            self._progress.setValue(i + 1)
-
-        result.avg_score = total_score / len(cases)
-        result.avg_latency_ms = total_latency / len(cases)
-        result.total_tokens = total_tokens
-        result.pass_rate = passed / len(cases)
-        result.cases = cases
-
+    def _on_eval_complete(self, result: EvalResult) -> None:
+        """评估完成"""
         self._results.append(result)
         self._refresh_results()
-        self._case_editor._refresh_table()
+        self._case_editor.refresh_table()  # 使用公开方法
 
         self._running = False
         self._btn_run.setEnabled(True)
         self._progress.setVisible(False)
 
         logger.info(
-            f"评估完成: {model}, 平均分={result.avg_score:.1f}, "
+            f"评估完成: {result.model}, 平均分={result.avg_score:.1f}, "
             f"通过率={result.pass_rate:.0%}"
         )
         self.eval_completed.emit(result)
+
+    def _on_eval_error(self, error_msg: str) -> None:
+        """评估错误"""
+        logger.error(f"评估失败: {error_msg}")
+        self._running = False
+        self._btn_run.setEnabled(True)
+        self._progress.setVisible(False)
 
     def _refresh_results(self) -> None:
         """刷新结果表格"""

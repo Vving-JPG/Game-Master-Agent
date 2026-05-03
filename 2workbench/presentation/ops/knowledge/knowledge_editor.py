@@ -68,9 +68,19 @@ class NPCEditor(QWidget):
         self._npc_list.currentCellChanged.connect(self._on_npc_selected)
         left_layout.addWidget(self._npc_list)
 
+        # 搜索栏
+        from presentation.widgets.search_bar import SearchBar
+        self._npc_search = SearchBar("搜索 NPC...")
+        self._npc_search.search_changed.connect(self._filter_npc_table)
+        left_layout.addWidget(self._npc_search)
+
         self._btn_add = StyledButton("+ 添加 NPC", style_type="primary")
         self._btn_add.clicked.connect(self._add_npc)
         left_layout.addWidget(self._btn_add)
+
+        self._btn_delete = StyledButton("🗑️ 删除 NPC", style_type="danger")
+        self._btn_delete.clicked.connect(self._delete_current_npc)
+        left_layout.addWidget(self._btn_delete)
 
         layout.addWidget(left, 1)
 
@@ -182,6 +192,29 @@ class NPCEditor(QWidget):
         })
         self._refresh_list()
         self._npc_list.selectRow(len(self._npcs) - 1)
+
+    def _delete_current_npc(self) -> None:
+        """删除当前选中的 NPC"""
+        current = self._npc_list.currentRow()
+        if current < 0:
+            return
+        npc_name = self._npcs[current].get("name", f"NPC_{current}")
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "确认删除", f"确定要删除 NPC '{npc_name}' 吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._npcs.pop(current)
+            self._refresh_list()
+            self.data_changed.emit()
+
+    def _filter_npc_table(self, keyword: str) -> None:
+        """根据关键词过滤 NPC 列表"""
+        keyword = keyword.lower()
+        for row in range(self._npc_list.rowCount()):
+            name = self._npc_list.item(row, 0).text().lower()
+            self._npc_list.setRowHidden(row, keyword != "" and keyword not in name)
 
     def _save_npc(self) -> None:
         row = self._npc_list.currentRow()

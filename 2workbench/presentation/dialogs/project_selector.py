@@ -106,7 +106,8 @@ class ProjectCard(QFrame):
         
     def mousePressEvent(self, event):
         """点击事件"""
-        self.clicked.emit(self.project_path)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.project_path)
 
 
 class ProjectSelector(QDialog):
@@ -237,7 +238,12 @@ class ProjectSelector(QDialog):
     def _scan_projects(self) -> List[Dict[str, str]]:
         """扫描项目目录"""
         projects = []
-        workspace = Path("./data")
+        # 使用 project_manager 获取工作区目录，避免依赖当前工作目录
+        try:
+            from presentation.project.manager import project_manager
+            workspace = project_manager.workspace_dir / "data" if project_manager.workspace_dir else Path("./data")
+        except Exception:
+            workspace = Path("./data")
         
         if not workspace.exists():
             return projects

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -72,8 +71,10 @@ class DeployManager(BaseWidget):
         self._framework_combo.addItems(["FastAPI", "Flask", "Standalone"])
         config_form.addRow("框架:", self._framework_combo)
 
-        self._port_spin = QLineEdit()
-        self._port_spin.setText("8000")
+        from PyQt6.QtWidgets import QSpinBox
+        self._port_spin = QSpinBox()
+        self._port_spin.setRange(1, 65535)
+        self._port_spin.setValue(8080)
         config_form.addRow("端口:", self._port_spin)
 
         self._host_edit = QLineEdit()

@@ -67,6 +67,7 @@ class PromptEditorWidget(BaseWidget):
         left_layout.setContentsMargins(4, 4, 4, 4)
 
         self._search = SearchBar("搜索 Prompt...")
+        self._search.search_changed.connect(self._filter_prompt_table)
         left_layout.addWidget(self._search)
 
         self._prompt_list = QListWidget()
@@ -327,3 +328,11 @@ class PromptEditorWidget(BaseWidget):
             self._current_prompt = None
             self._editor.clear()
             self._name_edit.clear()
+
+    def _filter_prompt_table(self, keyword: str) -> None:
+        """根据关键词过滤 Prompt 列表"""
+        keyword = keyword.lower()
+        for i in range(self._prompt_list.count()):
+            item = self._prompt_list.item(i)
+            match = keyword == "" or keyword in item.text().lower()
+            self._prompt_list.setItemHidden(item, not match)

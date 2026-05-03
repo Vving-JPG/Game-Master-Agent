@@ -2,15 +2,17 @@
 """Game Master Agent IDE — 应用入口
 
 启动流程:
-1. 初始化 QApplication
-2. 应用主题
-3. 初始化数据库
-4. 启用 Feature 系统
-5. 创建并显示主窗口
-6. 启动 qasync 事件循环
+1. 解析命令行参数
+2. 初始化 QApplication
+3. 应用主题
+4. 初始化数据库
+5. 启用 Feature 系统
+6. 创建并显示主窗口
+7. 启动 qasync 事件循环
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -20,97 +22,120 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description="Game Master Agent IDE")
+    parser.add_argument("--project", "-p", help="直接打开指定项目路径")
+    parser.add_argument("--version", "-v", action="version", version="2.0.0")
+    parser.add_argument("--no-gui", action="store_true", help="无头模式（仅测试）")
+    return parser.parse_args()
+
+
 def main() -> None:
     """主入口"""
+    # 1. 解析命令行参数
+    args = parse_args()
+
     from PyQt6.QtWidgets import QApplication
     import qasync
 
-    # 1. 创建 QApplication
+    # 2. 创建 QApplication
     app = QApplication(sys.argv)
     app.setApplicationName("Game Master Agent IDE")
     app.setOrganizationName("GMA")
 
-    # 2. 应用主题
+    # 3. 应用主题
     from presentation.theme.manager import theme_manager
     theme_manager.apply("dark")
 
-    # 3. 显示项目选择器（像 Godot 一样）
+    # 4. 显示项目选择器或直接使用命令行参数
     from presentation.dialogs.project_selector import ProjectSelector
     from presentation.project.new_dialog import NewProjectDialog
     from presentation.project.manager import project_manager
-    
-    selector = ProjectSelector()
+
     selected_project = None
-    create_new = False
-    user_cancelled = False
-    
-    def on_project_selected(path: str):
-        nonlocal selected_project
-        selected_project = path
-        
-    def on_new_project():
-        nonlocal create_new
-        create_new = True
-        
-    def on_rejected():
-        nonlocal user_cancelled
-        user_cancelled = True
-        
-    selector.project_selected.connect(on_project_selected)
-    selector.new_project_requested.connect(on_new_project)
-    selector.rejected.connect(on_rejected)
-    
-    # 循环显示项目选择器，直到用户选择项目或创建新项目
-    while True:
-        selector.exec()
-        
-        # 检查用户是否点击了 X 按钮关闭对话框
-        if user_cancelled:
-            # 用户取消，退出程序
-            return
-        
-        # 4. 处理项目选择结果
-        if create_new:
-            # 显示新建项目对话框
-            dialog = NewProjectDialog()
-            if dialog.exec() != NewProjectDialog.DialogCode.Accepted:
-                # 用户取消新建，回到项目选择器
-                create_new = False
-                user_cancelled = False
-                continue
-                
-            project_data = dialog.get_project_data()
-            name = project_data["name"]
-            template = project_data["template"]
-            
-            if not name:
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(None, "警告", "项目名称不能为空")
-                # 回到项目选择器
-                create_new = False
-                user_cancelled = False
-                continue
-            
-            try:
-                # 指定在 data 目录下创建项目
-                data_dir = PROJECT_ROOT / "data"
-                data_dir.mkdir(exist_ok=True)
-                selected_project = project_manager.create_project(name, template, directory=str(data_dir))
-                # 创建成功，跳出循环
-                break
-            except Exception as e:
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.critical(None, "创建失败", f"创建项目失败: {e}")
-                # 回到项目选择器
-                create_new = False
-                user_cancelled = False
-                continue
-        elif selected_project:
-            # 用户选择了已有项目，跳出循环
-            break
+
+    # 如果通过命令行指定了项目路径，直接打开
+    if args.project:
+        project_path = Path(args.project)
+        if project_path.exists():
+            selected_project = project_path
         else:
-            # 没有选择项目，回到项目选择器
-            continue
+            print(f"错误: 项目路径不存在: {args.project}")
+            return
+    else:
+        # 显示项目选择器（像 Godot 一样）
+        selector = ProjectSelector()
+        create_new = False
+        user_cancelled = False
+
+        def on_project_selected(path: str):
+            nonlocal selected_project
+            selected_project = path
+
+        def on_new_project():
+            nonlocal create_new
+            create_new = True
+
+        def on_rejected():
+            nonlocal user_cancelled
+            user_cancelled = True
+
+        selector.project_selected.connect(on_project_selected)
+        selector.new_project_requested.connect(on_new_project)
+        selector.rejected.connect(on_rejected)
+
+        # 循环显示项目选择器，直到用户选择项目或创建新项目
+        while True:
+            selector.exec()
+
+            # 检查用户是否点击了 X 按钮关闭对话框
+            if user_cancelled:
+                # 用户取消，退出程序
+                return
+
+            # 处理项目选择结果
+            if create_new:
+                # 显示新建项目对话框
+                dialog = NewProjectDialog()
+                if dialog.exec() != NewProjectDialog.DialogCode.Accepted:
+                    # 用户取消新建，回到项目选择器
+                    create_new = False
+                    user_cancelled = False
+                    continue
+
+                project_data = dialog.get_project_data()
+                name = project_data["name"]
+                template = project_data["template"]
+
+                if not name:
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.warning(None, "警告", "项目名称不能为空")
+                    # 回到项目选择器
+                    create_new = False
+                    user_cancelled = False
+                    continue
+
+                try:
+                    # 指定在 data 目录下创建项目
+                    data_dir = PROJECT_ROOT / "data"
+                    data_dir.mkdir(exist_ok=True)
+                    selected_project = project_manager.create_project(name, template, directory=str(data_dir))
+                    # 创建成功，跳出循环
+                    break
+                except Exception as e:
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.critical(None, "创建失败", f"创建项目失败: {e}")
+                    # 回到项目选择器
+                    create_new = False
+                    user_cancelled = False
+                    continue
+            elif selected_project:
+                # 用户选择了已有项目，跳出循环
+                break
+            else:
+                # 没有选择项目，回到项目选择器
+                continue
 
     # 5. 初始化数据库
     from foundation.config import settings
