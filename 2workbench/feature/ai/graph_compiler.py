@@ -147,49 +147,58 @@ class GraphCompiler:
             node_ids.add(node_id)
             logger.debug(f"编译节点: {node_id} ({node_type} → {node_func.__name__})")
 
-        # 添加边
+        # === 预处理：按 source 分组边 ===
+        normal_edges = []
+        conditional_groups: dict[str, dict] = {}  # source -> {"route_func": str, "branches": dict}
+
         for edge_data in edges:
             source = edge_data["from"]
             target = edge_data["to"]
             condition = edge_data.get("condition", "")
 
-            # 处理 START/END 特殊标记
-            actual_source = source
-            actual_target = target
-            if source in ("START", "__start__"):
-                actual_source = START
-            if target in ("END", "__end__"):
-                actual_target = END
+            actual_source = START if source in ("START", "__start__") else source
+            actual_target = END if target in ("END", "__end__") else target
 
             if condition and condition in CONDITION_FUNCTIONS:
-                # 条件边
-                route_func = CONDITION_FUNCTIONS[condition]
-                branches = CONDITION_BRANCHES.get(condition, {})
-
-                # 如果边指定了具体目标，覆盖默认分支
-                # 格式: {"from": "llm_reasoning", "to": "parse_output", "condition": "route_after_llm"}
-                # 含义: 当 route_after_llm 返回 "parse_output" 时，走这条边
-                if isinstance(actual_target, str) and actual_target not in (START, END):
-                    # 单分支条件边：只有返回值匹配 target 时走这条边
-                    # 需要收集同一 source 的所有条件边来构建完整映射
-                    pass  # 在下面统一处理
-
-                graph.add_conditional_edges(
-                    actual_source,
-                    route_func,
-                    branches,
-                )
-                logger.debug(f"编译条件边: {source} --[{condition}]--> {branches}")
+                key = str(actual_source)
+                if key not in conditional_groups:
+                    conditional_groups[key] = {"route_func": condition, "branches": {}}
+                conditional_groups[key]["branches"][str(actual_target)] = actual_target
             else:
-                # 普通边
-                graph.add_edge(actual_source, actual_target)
-                logger.debug(f"编译边: {source} --> {target}")
+                normal_edges.append((actual_source, actual_target))
+
+        # === 添加普通边 ===
+        for source, target in normal_edges:
+            # 跳过已有条件边的 source（避免 add_edge + add_conditional_edges 冲突）
+            if str(source) in conditional_groups:
+                logger.warning(f"跳过普通边 {source} -> {target}（该节点已有条件边）")
+                continue
+            graph.add_edge(source, target)
+            logger.debug(f"编译边: {source} --> {target}")
+
+        # === 添加条件边（每个 source 只调用一次）===
+        for source_key, group in conditional_groups.items():
+            route_func = CONDITION_FUNCTIONS.get(group["route_func"])
+            if route_func is None:
+                logger.warning(f"未知条件路由函数: {group['route_func']}")
+                continue
+
+            actual_source = START if source_key == str(START) else source_key
+            branches = group["branches"]
+
+            if not branches:
+                logger.warning(f"条件边 {source_key} 没有分支目标，跳过")
+                continue
+
+            graph.add_conditional_edges(actual_source, route_func, branches)
+            logger.debug(f"编译条件边: {source_key} --[{group['route_func']}]--> {list(branches.keys())}")
 
         # 编译
         compiled = graph.compile()
         node_count = len(node_ids)
         edge_count = len(edges)
-        logger.info(f"图编译完成: {node_count} 节点, {edge_count} 边")
+        cond_group_count = len(conditional_groups)
+        logger.info(f"图编译完成: {node_count} 节点, {len(normal_edges)} 普通边, {cond_group_count} 条件边组")
         return compiled
 
 

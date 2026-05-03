@@ -146,6 +146,16 @@ class GMAgent:
         turn = self._initial_state.get("turn_count", 0) + 1
         event_bus.emit(create_turn_start_event(str(self._world_id), turn))
 
+        # === 设置工具上下文 ===
+        from .tools import set_tool_context, ToolContext
+        from foundation.config import settings
+        ctx = ToolContext(
+            db_path=self._db_path or settings.database_path,
+            world_id=str(self._world_id),
+            player_id=self._initial_state.get("player", {}).get("id", 1),
+        )
+        set_tool_context(ctx)
+
         try:
             # 准备输入状态
             input_state = {
@@ -206,6 +216,9 @@ class GMAgent:
                 "error": str(e),
                 "narrative": f"[Agent 错误: {e}]",
             }
+        finally:
+            # 清理工具上下文
+            set_tool_context(None)
 
     async def stream(self, user_input: str, event_type: str = "player_action") -> AsyncGenerator[dict, None]:
         """流式执行一轮 Agent

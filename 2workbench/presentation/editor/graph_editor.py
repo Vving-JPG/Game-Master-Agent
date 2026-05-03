@@ -222,8 +222,8 @@ class GraphNodeItem(QGraphicsRectItem):
     def _delete(self) -> None:
         """删除节点"""
         scene = self.scene()
-        if scene:
-            scene.removeItem(self)
+        if scene and hasattr(scene, 'remove_node'):
+            scene.remove_node(self.node_id)
 
 
 class GraphEdgeItem(QGraphicsPathItem):
@@ -321,15 +321,16 @@ class GraphScene(QGraphicsScene):
         """删除节点及其连线"""
         node = self._nodes.pop(node_id, None)
         if node:
-            # 先从场景中移除关联的边
-            for edge in self._edges[:]:
-                if edge.source.node_id == node_id or edge.target.node_id == node_id:
-                    self.removeItem(edge)
-            # 过滤边列表
-            self._edges = [
+            # 一次性收集要删除的边
+            edges_to_remove = [
                 e for e in self._edges
-                if e.source.node_id != node_id and e.target.node_id != node_id
+                if e.source.node_id == node_id or e.target.node_id == node_id
             ]
+            # 从场景中移除关联的边
+            for edge in edges_to_remove:
+                self.removeItem(edge)
+            # 更新边列表
+            self._edges = [e for e in self._edges if e not in edges_to_remove]
             # 移除节点
             self.removeItem(node)
 
@@ -381,7 +382,7 @@ class GraphScene(QGraphicsScene):
 
 
 class GraphEditorView(QGraphicsView):
-    """图编辑器视图 — 支持缩放和平移"""
+    """图编辑器视图 — 支持缩放和平移、拖拽连线"""
 
     def __init__(self, scene: GraphScene, parent=None):
         super().__init__(scene, parent)
@@ -391,12 +392,96 @@ class GraphEditorView(QGraphicsView):
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self._zoom = 1.0
 
+        # 拖拽连线状态
+        self._dragging_edge = False
+        self._drag_source_port = None  # (node_id, "output"|"input")
+        self._temp_line = None
+
     def wheelEvent(self, event: QWheelEvent) -> None:
         """鼠标滚轮缩放"""
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         self._zoom *= factor
         self._zoom = max(0.3, min(3.0, self._zoom))
         self.setTransform(self.transform().scale(factor, factor))
+
+    def mousePressEvent(self, event):
+        """检测是否点击了连接点"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            item = self.itemAt(event.pos())
+            if isinstance(item, QGraphicsRectItem) and item.parentItem():
+                node = item.parentItem()
+                if isinstance(node, GraphNodeItem):
+                    # 判断是输入还是输出端口
+                    port_pos = item.pos()
+                    node_center = node.boundingRect().center()
+                    if port_pos.x() > node_center.x():
+                        self._drag_source_port = (node.node_id, "output")
+                    else:
+                        self._drag_source_port = (node.node_id, "input")
+                    self._dragging_edge = True
+                    self.setDragMode(QGraphicsView.DragMode.NoDrag)
+                    return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """拖拽时绘制临时连线"""
+        if self._dragging_edge and self._drag_source_port:
+            scene_pos = self.mapToScene(event.pos())
+
+            if self._temp_line is None:
+                self._temp_line = QGraphicsPathItem()
+                self._temp_line.setPen(QPen(QColor("#4A90D9"), 2, Qt.PenStyle.DashLine))
+                self.scene().addItem(self._temp_line)
+
+            # 获取源端口位置
+            source_node = self.scene()._nodes.get(self._drag_source_port[0])
+            if source_node:
+                if self._drag_source_port[1] == "output":
+                    start = source_node.get_output_pos()
+                else:
+                    start = source_node.get_input_pos()
+
+                # 创建曲线路径
+                path = QPainterPath()
+                path.moveTo(start)
+                ctrl_offset = abs(scene_pos.x() - start.x()) * 0.5
+                path.cubicTo(
+                    start + QPointF(ctrl_offset, 0),
+                    scene_pos - QPointF(ctrl_offset, 0),
+                    scene_pos,
+                )
+                self._temp_line.setPath(path)
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """释放时连接到目标节点"""
+        if self._dragging_edge and self._drag_source_port:
+            # 清除临时线
+            if self._temp_line:
+                self.scene().removeItem(self._temp_line)
+                self._temp_line = None
+
+            # 检测目标节点
+            target_item = self.itemAt(event.pos())
+            if isinstance(target_item, QGraphicsRectItem) and target_item.parentItem():
+                target_node = target_item.parentItem()
+                if isinstance(target_node, GraphNodeItem):
+                    source_id = self._drag_source_port[0]
+                    target_id = target_node.node_id
+                    if source_id != target_id:
+                        # 根据拖拽方向确定连接方向
+                        if self._drag_source_port[1] == "output":
+                            self.scene().add_edge(source_id, target_id)
+                        else:
+                            self.scene().add_edge(target_id, source_id)
+                        logger.debug(f"拖拽连线: {source_id} -> {target_id}")
+
+            self._dragging_edge = False
+            self._drag_source_port = None
+            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+            return
+        super().mouseReleaseEvent(event)
 
     def fit_to_view(self) -> None:
         """适应视图"""
@@ -450,6 +535,8 @@ class NodePropertyDialog(QDialog):
 
 class GraphEditorWidget(QWidget):
     """图编辑器组件 — 场景 + 视图 + 工具栏"""
+
+    _node_counter = 0  # 类变量，用于自动生成节点 ID
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -529,15 +616,33 @@ class GraphEditorWidget(QWidget):
 
     def _add_node_dialog(self) -> None:
         """添加节点对话框"""
-        dialog = NodePropertyDialog("new_node", "custom", "新节点")
+        # 自动生成唯一 ID
+        GraphEditorWidget._node_counter += 1
+        node_id = f"node_{GraphEditorWidget._node_counter}"
+
+        # 检查 ID 是否已存在
+        while node_id in self._scene._nodes:
+            GraphEditorWidget._node_counter += 1
+            node_id = f"node_{GraphEditorWidget._node_counter}"
+
+        dialog = NodePropertyDialog(node_id, "custom", "新节点")
         if dialog.exec():
             data = dialog.get_data()
+            # 如果用户修改了 ID，检查是否冲突
+            final_id = data["id"]
+            if final_id != node_id and final_id in self._scene._nodes:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "ID 冲突", f"节点 ID '{final_id}' 已存在，使用自动生成的 ID")
+                final_id = node_id
+
             self._scene.add_node(
-                node_id=data["id"],
+                node_id=final_id,
                 node_type=data["type"],
                 label=data["label"],
-                position={"x": 200, "y": 200},
+                position={"x": 200 + GraphEditorWidget._node_counter * 30,
+                          "y": 200 + GraphEditorWidget._node_counter * 20},
             )
+            logger.info(f"添加节点: {final_id} ({data['type']})")
 
     def _save_graph(self) -> None:
         """保存图定义到 graph.json 并触发编译"""

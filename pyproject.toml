@@ -16,6 +16,9 @@ dependencies = [
     "PyQt6>=6.6.0",
     "qasync>=0.27.0",
     "pyyaml>=6.0.1",
+    # LangGraph 依赖
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
 ]
 
 [tool.pytest.ini_options]

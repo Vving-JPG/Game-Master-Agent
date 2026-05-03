@@ -269,9 +269,15 @@ class LocationEditor(QWidget):
         self._loc_list.currentCellChanged.connect(self._on_loc_selected)
         left_layout.addWidget(self._loc_list)
 
+        btn_layout = QHBoxLayout()
         self._btn_add = StyledButton("+ 添加地点", style_type="primary")
         self._btn_add.clicked.connect(self._add_location)
-        left_layout.addWidget(self._btn_add)
+        btn_layout.addWidget(self._btn_add)
+
+        self._btn_delete = StyledButton("🗑️ 删除", style_type="danger")
+        self._btn_delete.clicked.connect(self._delete_location)
+        btn_layout.addWidget(self._btn_delete)
+        left_layout.addLayout(btn_layout)
 
         layout.addWidget(left, 1)
 
@@ -350,6 +356,28 @@ class LocationEditor(QWidget):
         self._refresh_list()
         self._loc_list.selectRow(row)
         self.data_changed.emit()
+
+    def _delete_location(self) -> None:
+        """删除当前选中的地点"""
+        from PyQt6.QtWidgets import QMessageBox
+        row = self._loc_list.currentRow()
+        if row < 0 or row >= len(self._locations):
+            return
+        loc_name = self._locations[row].get("name", f"地点_{row+1}")
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除地点 '{loc_name}' 吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._locations.pop(row)
+            self._refresh_list()
+            # 清空编辑器
+            self._name_edit.clear()
+            self._desc_edit.clear()
+            self._connections_edit.clear()
+            self.data_changed.emit()
 
     def get_data(self) -> list[dict]:
         return list(self._locations)

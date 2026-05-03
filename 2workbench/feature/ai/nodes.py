@@ -40,7 +40,7 @@ logger = get_logger(__name__)
 _prompt_builder = PromptBuilder()
 
 
-def node_handle_event(state: AgentState) -> dict[str, Any]:
+async def node_handle_event(state: AgentState) -> dict[str, Any]:
     """节点 1: 接收事件，更新状态
 
     从 state.current_event 中提取事件信息，
@@ -75,7 +75,7 @@ def node_handle_event(state: AgentState) -> dict[str, Any]:
     }
 
 
-def node_build_prompt(state: AgentState) -> dict[str, Any]:
+async def node_build_prompt(state: AgentState) -> dict[str, Any]:
     """节点 2: 组装 Prompt
 
     调用 PromptBuilder 组装完整的 messages 列表。
@@ -117,7 +117,7 @@ def node_build_prompt(state: AgentState) -> dict[str, Any]:
     }
 
 
-def node_llm_reasoning(state: AgentState) -> dict[str, Any]:
+async def node_llm_reasoning(state: AgentState) -> dict[str, Any]:
     """节点 3: 调用 LLM（流式）
 
     使用 ModelRouter 选择合适的模型，
@@ -152,34 +152,20 @@ def node_llm_reasoning(state: AgentState) -> dict[str, Any]:
     total_tokens = 0
 
     try:
-        async def _stream_and_collect():
-            nonlocal full_content, reasoning_content, tool_calls, total_tokens
-            async for event in client.stream(
-                messages=llm_messages,
-                temperature=config.get("temperature", 0.7),
-                tools=get_tools_schema() if state.get("active_skills") else None,
-            ):
-                if event.type == "token":
-                    full_content += event.content
-                    event_bus.emit(create_stream_token_event(event.content))
-                elif event.type == "reasoning":
-                    reasoning_content += event.content
-                elif event.type == "tool_call":
-                    tool_calls.extend(event.tool_calls)
-                elif event.type == "complete":
-                    total_tokens = event.total_tokens
-
-        # 在同步上下文中运行异步代码
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import qasync
-                loop.run_until_complete(_stream_and_collect())
-            else:
-                asyncio.run(_stream_and_collect())
-        except RuntimeError:
-            asyncio.run(_stream_and_collect())
+        async for event in client.stream(
+            messages=llm_messages,
+            temperature=config.get("temperature", 0.7),
+            tools=get_tools_schema() if state.get("active_skills") else None,
+        ):
+            if event.type == "token":
+                full_content += event.content
+                event_bus.emit(create_stream_token_event(event.content))
+            elif event.type == "reasoning":
+                reasoning_content += event.content
+            elif event.type == "tool_call":
+                tool_calls.extend(event.tool_calls)
+            elif event.type == "complete":
+                total_tokens = event.total_tokens
 
     except Exception as e:
         logger.error(f"LLM 调用失败: {e}")
@@ -208,7 +194,7 @@ def node_llm_reasoning(state: AgentState) -> dict[str, Any]:
     }
 
 
-def node_parse_output(state: AgentState) -> dict[str, Any]:
+async def node_parse_output(state: AgentState) -> dict[str, Any]:
     """节点 4: 解析 LLM 输出
 
     调用 CommandParser 将 LLM 文本解析为结构化命令。
@@ -248,7 +234,7 @@ def node_parse_output(state: AgentState) -> dict[str, Any]:
     }
 
 
-def node_execute_commands(state: AgentState) -> dict[str, Any]:
+async def node_execute_commands(state: AgentState) -> dict[str, Any]:
     """节点 5: 执行解析出的命令
 
     将命令分发给对应的工具或处理器。
@@ -294,7 +280,7 @@ def node_execute_commands(state: AgentState) -> dict[str, Any]:
     }
 
 
-def node_update_memory(state: AgentState) -> dict[str, Any]:
+async def node_update_memory(state: AgentState) -> dict[str, Any]:
     """节点 6: 更新记忆
 
     将记忆更新写入数据库。
@@ -334,7 +320,7 @@ def node_update_memory(state: AgentState) -> dict[str, Any]:
 
 # ===== 条件路由函数 =====
 
-def route_after_llm(state: AgentState) -> str:
+async def route_after_llm(state: AgentState) -> str:
     """LLM 推理后的路由
 
     如果有 tool_calls -> execute_commands
@@ -346,7 +332,7 @@ def route_after_llm(state: AgentState) -> str:
     return "parse_output"
 
 
-def route_after_parse(state: AgentState) -> str:
+async def route_after_parse(state: AgentState) -> str:
     """解析后的路由
 
     如果有命令 -> execute_commands

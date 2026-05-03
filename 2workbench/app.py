@@ -28,6 +28,11 @@ def parse_args():
     parser.add_argument("--project", "-p", help="直接打开指定项目路径")
     parser.add_argument("--version", "-v", action="version", version="2.0.0")
     parser.add_argument("--no-gui", action="store_true", help="无头模式（仅测试）")
+    parser.add_argument("--theme", "-t", choices=["dark", "light"], default="dark", help="主题模式 (默认: dark)")
+    parser.add_argument("--port", type=int, default=18080, help="HTTP 服务器端口 (默认: 18080)")
+    parser.add_argument("--debug", "-d", action="store_true", help="调试模式")
+    parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="日志级别")
+    parser.add_argument("--skip-selector", action="store_true", help="跳过项目选择器")
     return parser.parse_args()
 
 
@@ -44,9 +49,15 @@ def main() -> None:
     app.setApplicationName("Game Master Agent IDE")
     app.setOrganizationName("GMA")
 
-    # 3. 应用主题
+    # 3. 设置日志级别
+    if args.debug:
+        args.log_level = "DEBUG"
+    from foundation.logger import setup_logging
+    setup_logging(level=args.log_level)
+
+    # 4. 应用主题
     from presentation.theme.manager import theme_manager
-    theme_manager.apply("dark")
+    theme_manager.apply(args.theme)
 
     # 4. 显示项目选择器或直接使用命令行参数
     from presentation.dialogs.project_selector import ProjectSelector
@@ -63,6 +74,11 @@ def main() -> None:
         else:
             print(f"错误: 项目路径不存在: {args.project}")
             return
+    elif args.skip_selector:
+        # 跳过项目选择器，直接创建空项目
+        data_dir = PROJECT_ROOT / "data"
+        data_dir.mkdir(exist_ok=True)
+        selected_project = None
     else:
         # 显示项目选择器（像 Godot 一样）
         selector = ProjectSelector()

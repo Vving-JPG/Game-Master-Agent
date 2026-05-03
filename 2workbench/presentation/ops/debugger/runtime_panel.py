@@ -69,6 +69,7 @@ class ConsoleOutput(QWidget):
         layout.addWidget(self._output)
 
         self._count = 0
+        self._line_count_int = 0  # 行数统计（整数）
 
     def append_text(self, text: str, color: str = "#cccccc") -> None:
         """追加文本"""
@@ -110,7 +111,7 @@ class ConsoleOutput(QWidget):
         # 更新计数
         self._count += len(token)
         if '\n' in token:
-            self._line_count += token.count('\n')
+            self._line_count_int += token.count('\n')
         self._update_stats()
 
     def append_command(self, command: str, result: str) -> None:
@@ -121,7 +122,13 @@ class ConsoleOutput(QWidget):
         """清空输出"""
         self._output.clear()
         self._count = 0
+        self._line_count_int = 0
         self._line_count.setText("行数: 0")
+
+    def _update_stats(self) -> None:
+        """更新统计显示"""
+        self._count_label.setText(f"字符: {self._count}")
+        self._line_count.setText(f"行数: {self._line_count_int}")
 
     def _copy_all(self) -> None:
         """复制全部内容"""

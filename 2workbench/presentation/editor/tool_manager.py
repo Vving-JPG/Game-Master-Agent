@@ -25,6 +25,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from foundation.logger import get_logger
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
+from presentation.widgets.search_bar import SearchBar
 
 logger = get_logger(__name__)
 
@@ -185,6 +186,11 @@ class ToolManagerWidget(BaseWidget):
         list_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         left_layout.addWidget(list_label)
 
+        # 搜索框
+        self._search = SearchBar("搜索工具...")
+        self._search.search_changed.connect(self._filter_tool_table)
+        left_layout.addWidget(self._search)
+
         self._tool_list = QListWidget()
         self._tool_list.currentRowChanged.connect(self._on_tool_selected)
         left_layout.addWidget(self._tool_list)
@@ -294,6 +300,20 @@ class ToolManagerWidget(BaseWidget):
                 status = "✅" if tool.enabled else "❌"
                 self._tool_list.addItem(f"{status} {icon} {tool.name}")
 
+    def _filter_tool_table(self, keyword: str) -> None:
+        """根据关键词过滤工具列表"""
+        keyword = keyword.lower()
+        self._tool_list.clear()
+        for tool in self._tools:
+            # 搜索名称和描述
+            match = (keyword == "" or
+                     keyword in tool.name.lower() or
+                     keyword in tool.description.lower())
+            if match:
+                icon = "🔧" if tool.category == "builtin" else "🔌"
+                status = "✅" if tool.enabled else "❌"
+                self._tool_list.addItem(f"{status} {icon} {tool.name}")
+
     def _on_tool_selected(self, row: int) -> None:
         """选中工具"""
         if row < 0 or row >= len(self._tools):
@@ -374,23 +394,72 @@ class ToolManagerWidget(BaseWidget):
             self.tools_changed.emit(self._tools)
             self._logger.info(f"自定义工具添加: {name}")
 
+            # === 注册到 Agent 工具集 ===
+            self._register_tool_to_agent(tool)
+
+    def _register_tool_to_agent(self, tool: ToolDefinition) -> None:
+        """注册工具到 Agent 工具集"""
+        try:
+            from feature.ai.tools import register_tool
+
+            # 创建默认 handler（实际项目中可能需要更复杂的逻辑）
+            def handler(**kwargs):
+                return f"工具 {tool.name} 执行: {kwargs}"
+
+            register_tool(
+                name=tool.name,
+                description=tool.description,
+                parameters_schema=tool.parameters,
+                handler=handler,
+            )
+            self._logger.info(f"工具已注册到 Agent: {tool.name}")
+        except Exception as e:
+            self._logger.error(f"工具注册到 Agent 失败: {e}")
+
     def _run_test(self) -> None:
-        """执行工具测试"""
+        """真实调用选中的工具"""
         row = self._tool_list.currentRow()
         if row < 0:
+            self._test_result.setPlainText("请先选择一个工具")
             return
+
         tool = self._tools[row]
 
         try:
-            params = json.loads(self._test_input.toPlainText())
-        except json.JSONDecodeError:
-            self._test_result.setPlainText("❌ JSON 格式错误")
+            params = json.loads(self._test_input.toPlainText() or "{}")
+        except json.JSONDecodeError as e:
+            self._test_result.setPlainText(f"❌ JSON 格式错误: {e}")
             return
 
         self._test_result.setPlainText(f"⏳ 调用 {tool.name}...\n参数: {json.dumps(params, ensure_ascii=False)}")
 
-        # 模拟测试（实际调用在 P5 运行时调试中实现）
-        self._test_result.append(f"\n✅ 模拟调用成功\n工具: {tool.name}\n参数: {json.dumps(params, ensure_ascii=False, indent=2)}")
+        # === 真实调用工具 ===
+        try:
+            from feature.ai.tools import get_all_tools, set_tool_context, ToolContext
+            from foundation.config import settings
+
+            # 设置临时工具上下文
+            ctx = ToolContext(
+                db_path=settings.database_path,
+                world_id="test",
+                player_id=1,
+            )
+            set_tool_context(ctx)
+
+            # 查找匹配的工具
+            all_tools = get_all_tools()
+            for t in all_tools:
+                if t.name == tool.name:
+                    result = t.invoke(params)
+                    self._test_result.append(f"\n✅ 调用成功:\n{result}")
+                    return
+
+            self._test_result.append(f"\n❌ 未找到工具: {tool.name}")
+
+        except Exception as e:
+            self._test_result.append(f"\n❌ 调用失败: {e}")
+        finally:
+            set_tool_context(None)
 
     def get_enabled_tools(self) -> list[ToolDefinition]:
         """获取已启用的工具"""

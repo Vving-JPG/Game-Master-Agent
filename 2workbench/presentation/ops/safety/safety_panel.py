@@ -130,9 +130,22 @@ class SafetyPanel(BaseWidget):
         self._name_edit = QLineEdit()
         edit_layout.addRow("名称:", self._name_edit)
 
+        pattern_layout = QHBoxLayout()
         self._pattern_edit = QLineEdit()
         self._pattern_edit.setPlaceholderText("正则表达式，如 (暴力|血腥)")
-        edit_layout.addRow("匹配模式:", self._pattern_edit)
+        self._pattern_edit.textChanged.connect(self._validate_pattern_live)
+        pattern_layout.addWidget(self._pattern_edit)
+
+        self._pattern_status = QLabel("✓")
+        self._pattern_status.setStyleSheet("color: #4caf50; font-weight: bold;")
+        self._pattern_status.setToolTip("正则表达式有效")
+        pattern_layout.addWidget(self._pattern_status)
+
+        self._btn_validate = StyledButton("验证", style_type="secondary")
+        self._btn_validate.clicked.connect(self._validate_pattern)
+        pattern_layout.addWidget(self._btn_validate)
+
+        edit_layout.addRow("匹配模式:", pattern_layout)
 
         self._category_combo = QComboBox()
         self._category_combo.addItems(["violence", "sexual", "political", "custom"])
@@ -237,6 +250,42 @@ class SafetyPanel(BaseWidget):
         self.rules_changed.emit()
         logger.info(f"规则已保存: {rule.name}")
 
+    def _validate_pattern_live(self, text: str) -> None:
+        """实时验证正则表达式"""
+        if not text:
+            self._pattern_status.setText("○")
+            self._pattern_status.setStyleSheet("color: #858585;")
+            self._pattern_status.setToolTip("请输入正则表达式")
+            return
+        try:
+            re.compile(text)
+            self._pattern_status.setText("✓")
+            self._pattern_status.setStyleSheet("color: #4caf50; font-weight: bold;")
+            self._pattern_status.setToolTip("正则表达式有效")
+        except re.error as e:
+            self._pattern_status.setText("✗")
+            self._pattern_status.setStyleSheet("color: #f44336; font-weight: bold;")
+            self._pattern_status.setToolTip(f"正则表达式错误: {e}")
+
+    def _validate_pattern(self) -> None:
+        """验证正则表达式并显示详细结果"""
+        from PyQt6.QtWidgets import QMessageBox
+        pattern = self._pattern_edit.text()
+        if not pattern:
+            QMessageBox.warning(self, "验证结果", "请输入正则表达式")
+            return
+        try:
+            compiled = re.compile(pattern)
+            QMessageBox.information(
+                self, "验证结果",
+                f"✅ 正则表达式有效\n\n"
+                f"模式: {pattern}\n"
+                f"组数: {compiled.groups}\n"
+                f"命名组: {list(compiled.groupindex.keys())}"
+            )
+        except re.error as e:
+            QMessageBox.critical(self, "验证失败", f"❌ 正则表达式错误:\n{e}")
+
     def _on_level_changed(self, text: str) -> None:
         """切换安全级别"""
         level_map = {"严格": SafetyLevel.STRICT, "标准": SafetyLevel.STANDARD, "宽松": SafetyLevel.RELAXED}
@@ -282,8 +331,8 @@ class SafetyPanel(BaseWidget):
                 pass
             try:
                 result = re.sub(rule.pattern, rule.replacement, result)
-            except re.error:
-                pass
+            except re.error as e:
+                logger.warning(f"正则表达式错误 (规则: {rule.name}, 模式: {rule.pattern}): {e}")
         return result
 
     def _import_rules(self) -> None:

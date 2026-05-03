@@ -217,7 +217,7 @@ class PromptEditorWidget(BaseWidget):
         self._var_count_label.setText(f"变量: {len(variables)}")
 
     def _save_prompt(self) -> None:
-        """保存当前 Prompt"""
+        """保存当前 Prompt 到内存 + 持久化到文件"""
         if not self._current_prompt:
             return
         content = self._editor.toPlainText()
@@ -230,8 +230,15 @@ class PromptEditorWidget(BaseWidget):
             PromptVersion(content=content, note="手动保存")
         )
 
+        # === 持久化到文件 ===
+        try:
+            from presentation.project.manager import project_manager
+            project_manager.save_prompt(self._current_prompt, content)
+            logger.info(f"Prompt 已持久化: {self._current_prompt} ({len(content)} 字符)")
+        except Exception as e:
+            logger.error(f"Prompt 持久化失败: {e}")
+
         self.prompt_changed.emit(self._current_prompt, content)
-        self._logger.info(f"Prompt 保存: {self._current_prompt} ({len(content)} 字符)")
 
     def _preview_prompt(self) -> None:
         """预览 Prompt（替换变量）"""

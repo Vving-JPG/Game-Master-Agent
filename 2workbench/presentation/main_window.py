@@ -75,7 +75,7 @@ class LeftPanel(BaseWidget):
         # 样式由全局 QSS 控制，不再设置硬编码样式
         
         layout.addWidget(self.project_tree)
-        print(f"[LeftPanel] UI 初始化完成")
+        logger.debug("[LeftPanel] UI 初始化完成")
     
     def _on_item_double_clicked(self, item, column):
         """处理双击事件 — 打开文件"""
@@ -84,7 +84,7 @@ class LeftPanel(BaseWidget):
             from pathlib import Path
             path = Path(file_path)
             if path.is_file():
-                print(f"[LeftPanel] 双击打开文件: {file_path}")
+                logger.info(f"[LeftPanel] 双击打开文件: {file_path}")
                 self.file_open_requested.emit(file_path)
             else:
                 # 文件夹则展开/折叠
@@ -101,25 +101,25 @@ class LeftPanel(BaseWidget):
         self.project_tree.clear()
         
         if not project_path:
-            print(f"[LeftPanel] 项目路径为空")
+            logger.warning("[LeftPanel] 项目路径为空")
             return
-        
+
         root = Path(project_path)
         if not root.exists():
-            print(f"[LeftPanel] 项目路径不存在: {project_path}")
+            logger.error(f"[LeftPanel] 项目路径不存在: {project_path}")
             return
-        
+
         project_name = root.name
-        print(f"[LeftPanel] 加载项目树: {project_name} ({root})")
-        
+        logger.info(f"[LeftPanel] 加载项目树: {project_name} ({root})")
+
         # 创建根节点
         root_item = QTreeWidgetItem(self.project_tree)
         root_item.setText(0, f"📁 {project_name}")
         root_item.setData(0, Qt.ItemDataRole.UserRole, str(root))
-        
+
         # 添加项目文件和文件夹
         file_count = self._add_tree_items(root_item, root)
-        print(f"[LeftPanel] 添加了 {file_count} 个文件/文件夹")
+        logger.debug(f"[LeftPanel] 添加了 {file_count} 个文件/文件夹")
         
         self.project_tree.expandItem(root_item)
         self.project_tree.update()  # 强制刷新
@@ -132,7 +132,7 @@ class LeftPanel(BaseWidget):
         count = 0
         try:
             items = list(path.iterdir())
-            print(f"[LeftPanel] 扫描目录: {path}, 找到 {len(items)} 个条目")
+            logger.debug(f"[LeftPanel] 扫描目录: {path}, 找到 {len(items)} 个条目")
             
             for item in sorted(items, key=lambda x: (x.is_file(), x.name)):
                 tree_item = QTreeWidgetItem(parent_item)
@@ -148,9 +148,9 @@ class LeftPanel(BaseWidget):
                     tree_item.setText(0, f"{icon} {item.name}")
                     count += 1
         except PermissionError as e:
-            print(f"[LeftPanel] 权限错误: {e}")
+            logger.error(f"[LeftPanel] 权限错误: {e}")
         except Exception as e:
-            print(f"[LeftPanel] 添加树节点错误: {e}")
+            logger.error(f"[LeftPanel] 添加树节点错误: {e}")
         
         return count
     
@@ -650,7 +650,49 @@ class MainWindow(QMainWindow):
 
         # Edit 菜单
         edit_menu = menubar.addMenu("编辑(&E)")
-        # 不添加 Ctrl+Z 和 Ctrl+Y 的 action，让 QTextEdit 等控件使用默认的撤销/重做行为
+
+        # 撤销/重做 - 仅对文本编辑器有效
+        undo_action = QAction("撤销(&U)", self)
+        undo_action.setShortcut("Ctrl+Z")
+        undo_action.triggered.connect(self._on_undo)
+        edit_menu.addAction(undo_action)
+
+        redo_action = QAction("重做(&R)", self)
+        redo_action.setShortcut("Ctrl+Y")
+        redo_action.triggered.connect(self._on_redo)
+        edit_menu.addAction(redo_action)
+
+        edit_menu.addSeparator()
+
+        # 剪切/复制/粘贴 - 仅对文本编辑器有效
+        cut_action = QAction("剪切(&T)", self)
+        cut_action.setShortcut("Ctrl+X")
+        cut_action.triggered.connect(self._on_cut)
+        edit_menu.addAction(cut_action)
+
+        copy_action = QAction("复制(&C)", self)
+        copy_action.setShortcut("Ctrl+C")
+        copy_action.triggered.connect(self._on_copy)
+        edit_menu.addAction(copy_action)
+
+        paste_action = QAction("粘贴(&P)", self)
+        paste_action.setShortcut("Ctrl+V")
+        paste_action.triggered.connect(self._on_paste)
+        edit_menu.addAction(paste_action)
+
+        edit_menu.addSeparator()
+
+        # 选择全部
+        select_all_action = QAction("全选(&A)", self)
+        select_all_action.setShortcut("Ctrl+A")
+        select_all_action.triggered.connect(self._on_select_all)
+        edit_menu.addAction(select_all_action)
+
+        # 查找
+        find_action = QAction("查找(&F)", self)
+        find_action.setShortcut("Ctrl+F")
+        find_action.triggered.connect(self._on_find)
+        edit_menu.addAction(find_action)
 
         # View 菜单
         view_menu = menubar.addMenu("视图(&V)")
@@ -852,6 +894,56 @@ class MainWindow(QMainWindow):
         token = event.get("token", "")
         # 流式 token 更新（后续 Step 在控制台面板显示）
         pass
+
+    def _on_undo(self) -> None:
+        """撤销操作"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, 'undo'):
+            current.undo()
+        elif hasattr(current, 'textCursor'):
+            # QTextEdit 默认撤销
+            current.undo()
+
+    def _on_redo(self) -> None:
+        """重做操作"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, 'redo'):
+            current.redo()
+        elif hasattr(current, 'textCursor'):
+            # QTextEdit 默认重做
+            current.redo()
+
+    def _on_cut(self) -> None:
+        """剪切"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, 'cut'):
+            current.cut()
+
+    def _on_copy(self) -> None:
+        """复制"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, 'copy'):
+            current.copy()
+
+    def _on_paste(self) -> None:
+        """粘贴"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, 'paste'):
+            current.paste()
+
+    def _on_select_all(self) -> None:
+        """全选"""
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, 'selectAll'):
+            current.selectAll()
+
+    def _on_find(self) -> None:
+        """查找"""
+        # 聚焦到当前编辑器的搜索功能
+        current = self.center_panel.tab_widget.currentWidget()
+        if hasattr(current, '_search'):
+            current._search.setFocus()
+            current._search.selectAll()
 
     # --- 菜单动作 ---
 
@@ -1108,6 +1200,14 @@ class MainWindow(QMainWindow):
         # 创建 Agent 实例并运行
         self._show_message("Agent 运行中...")
         self._current_agent = GMAgent(world_id=1)
+
+        # === 使用项目编译的图 ===
+        try:
+            compiled_graph = project_manager.compile_graph()
+            self._current_agent.set_graph(compiled_graph, source="json")
+            logger.info("使用项目编译的图运行 Agent")
+        except Exception as e:
+            logger.warning(f"项目图编译失败，使用默认图: {e}")
         
         # 在后台线程中运行 Agent
         import asyncio
@@ -1417,6 +1517,13 @@ class MainWindow(QMainWindow):
         <tr><td><b>Ctrl+B</b></td><td>切换侧边栏</td></tr>
         <tr><td><b>Ctrl+,</b></td><td>打开设置</td></tr>
         <tr><td><b>Ctrl+Shift+P</b></td><td>命令面板</td></tr>
+        <tr><td><b>Ctrl+Z</b></td><td>撤销</td></tr>
+        <tr><td><b>Ctrl+Y</b></td><td>重做</td></tr>
+        <tr><td><b>Ctrl+X</b></td><td>剪切</td></tr>
+        <tr><td><b>Ctrl+C</b></td><td>复制</td></tr>
+        <tr><td><b>Ctrl+V</b></td><td>粘贴</td></tr>
+        <tr><td><b>Ctrl+A</b></td><td>全选</td></tr>
+        <tr><td><b>Ctrl+F</b></td><td>查找</td></tr>
         <tr><td><b>F5</b></td><td>运行 Agent</td></tr>
         <tr><td><b>Shift+F5</b></td><td>停止 Agent</td></tr>
         <tr><td><b>F11</b></td><td>全屏切换</td></tr>
