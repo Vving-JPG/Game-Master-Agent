@@ -1,0 +1,30 @@
+[
+  {
+    "model": "deepseek-v4",
+    "provider": "预置"
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "provider": "预置"
+  },
+  {
+    "model": "deepseek-v4-lite",
+    "provider": "预置"
+  },
+  {
+    "model": "gpt-4o",
+    "provider": "预置"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "provider": "预置"
+  },
+  {
+    "model": "claude-sonnet-4-20250514",
+    "provider": "预置"
+  },
+  {
+    "model": "claude-haiku-4-20250414",
+    "provider": "预置"
+  }
+]

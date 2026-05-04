@@ -657,6 +657,13 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        restart_action = QAction("重启(&R)", self)
+        restart_action.setShortcut("Ctrl+Shift+R")
+        restart_action.triggered.connect(self._on_restart)
+        file_menu.addAction(restart_action)
+
+        file_menu.addSeparator()
+
         exit_action = QAction("退出(&Q)", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
@@ -1016,6 +1023,27 @@ class MainWindow(QMainWindow):
         if path:
             # 通过信号触发统一处理
             self.open_project_requested.emit(path, "")
+
+    def _on_restart(self) -> None:
+        """重启应用"""
+        from PyQt6.QtWidgets import QMessageBox
+        import sys
+        import os
+
+        reply = QMessageBox.question(
+            self, "重启确认", "确定要重启应用吗？\n未保存的更改将会丢失。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            logger.info("用户请求重启应用")
+            # 保存当前命令行参数
+            args = sys.argv[:]
+            # 关闭当前应用
+            self.close()
+            # 重新启动
+            os.execl(sys.executable, sys.executable, *args)
 
     def _on_save(self) -> None:
         """保存当前项目"""

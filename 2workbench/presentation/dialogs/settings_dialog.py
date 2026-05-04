@@ -27,17 +27,6 @@ logger = get_logger(__name__)
 # 自定义模型存储路径
 CUSTOM_MODELS_FILE = Path("./data/custom_models.json")
 
-# 内置模型列表
-BUILTIN_MODELS = [
-    {"model": "deepseek-v4", "provider": "预置"},
-    {"model": "deepseek-v4-pro", "provider": "预置"},
-    {"model": "deepseek-v4-lite", "provider": "预置"},
-    {"model": "gpt-4o", "provider": "预置"},
-    {"model": "gpt-4o-mini", "provider": "预置"},
-    {"model": "claude-sonnet-4-20250514", "provider": "预置"},
-    {"model": "claude-haiku-4-20250414", "provider": "预置"},
-]
-
 
 class AddModelDialog(QDialog):
     """添加/编辑模型对话框 — 极简表单"""
@@ -48,15 +37,33 @@ class AddModelDialog(QDialog):
         self.setWindowTitle("编辑模型" if edit_data else "添加模型")
         self.setFixedSize(400, 340)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        # 允许点击外部关闭
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self._setup_ui()
         self._apply_theme()
         if edit_data:
             self._fill_data(edit_data)
 
+    def keyPressEvent(self, event) -> None:
+        """按 ESC 键关闭对话框"""
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        """点击对话框外部区域关闭"""
+        # 将全局坐标转换为对话框局部坐标
+        local_pos = self.mapFromGlobal(event.globalPosition().toPoint())
+        if not self.rect().contains(local_pos):
+            self.reject()
+        else:
+            super().mousePressEvent(event)
+
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
 
         # 标题栏
         title_bar = QHBoxLayout()
@@ -64,15 +71,7 @@ class AddModelDialog(QDialog):
         title_label.setObjectName("dialogTitle")
         title_bar.addWidget(title_label)
         title_bar.addStretch(1)
-
-        close_btn = QPushButton("✕")
-        close_btn.setObjectName("dialogCloseBtn")
-        close_btn.setFixedSize(24, 24)
-        close_btn.clicked.connect(self.reject)
-        title_bar.addWidget(close_btn)
         layout.addLayout(title_bar)
-
-        layout.addSpacing(8)
 
         # 模型名称
         model_label = QLabel("* 模型")
@@ -82,6 +81,7 @@ class AddModelDialog(QDialog):
         self._model_input = QLineEdit()
         self._model_input.setPlaceholderText("选择模型")
         self._model_input.setObjectName("formInput")
+        self._model_input.setMinimumHeight(32)
         layout.addWidget(self._model_input)
 
         # API 密钥
@@ -93,6 +93,7 @@ class AddModelDialog(QDialog):
         self._key_input.setPlaceholderText("输入 API 密钥")
         self._key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self._key_input.setObjectName("formInput")
+        self._key_input.setMinimumHeight(32)
         layout.addWidget(self._key_input)
 
         # 自定义请求地址（可选）
@@ -112,16 +113,31 @@ class AddModelDialog(QDialog):
         self._url_input = QLineEdit()
         self._url_input.setPlaceholderText("例如 https://api.openai.com/v1/chat/completions")
         self._url_input.setObjectName("formInput")
+        self._url_input.setMinimumHeight(32)
         layout.addWidget(self._url_input)
 
         layout.addStretch(1)
 
-        # 添加按钮
+        # 按钮行
+        btn_row = QHBoxLayout()
+        
+        # 取消按钮
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("cancelBtn")
+        cancel_btn.setFixedHeight(36)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+        
+        btn_row.addStretch(1)
+        
+        # 添加/保存按钮
         self._submit_btn = QPushButton("添加模型" if not self._edit_data else "保存")
         self._submit_btn.setObjectName("submitBtn")
         self._submit_btn.setFixedHeight(36)
         self._submit_btn.clicked.connect(self._on_submit)
-        layout.addWidget(self._submit_btn)
+        btn_row.addWidget(self._submit_btn)
+        
+        layout.addLayout(btn_row)
 
     def _fill_data(self, data: Dict[str, Any]) -> None:
         """编辑模式填充数据"""
@@ -220,6 +236,18 @@ class AddModelDialog(QDialog):
                 background-color: """ + accent + """;
                 border-color: """ + accent + """;
             }
+            QPushButton#cancelBtn {
+                background-color: transparent;
+                color: """ + text_sec + """;
+                border: 1px solid """ + border + """;
+                border-radius: 6px;
+                font-size: 14px;
+                font-family: """ + font + """;
+            }
+            QPushButton#cancelBtn:hover {
+                background-color: """ + p.get("bg_hover", "#3e3e42") + """;
+                color: """ + text_bright + """;
+            }
         """)
 
 
@@ -237,37 +265,22 @@ class ModelListWidget(QWidget):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(4)
 
         # 页面标题
         title = QLabel("模型")
         title.setObjectName("pageTitle")
+        title.setFixedHeight(28)
         layout.addWidget(title)
-
-        layout.addSpacing(12)
-
-        # 模型管理小节
-        section_title = QLabel("模型管理")
-        section_title.setObjectName("sectionTitle")
-        layout.addWidget(section_title)
-
-        desc = QLabel("配置 API key 添加更多可用模型，预置模型默认使用稳定版本。")
-        desc.setObjectName("sectionDesc")
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-
-        layout.addSpacing(12)
 
         # 添加模型按钮
         self._add_btn = QPushButton("+ 添加模型")
         self._add_btn.setObjectName("addModelBtn")
-        self._add_btn.setFixedHeight(34)
+        self._add_btn.setFixedHeight(26)
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.clicked.connect(self._on_add_model)
         layout.addWidget(self._add_btn)
-
-        layout.addSpacing(12)
 
         # 模型列表容器
         list_frame = QFrame()
@@ -299,13 +312,18 @@ class ModelListWidget(QWidget):
 
         list_layout.addWidget(header)
 
-        # 内置模型分组
-        self._builtin_section = self._create_section("内置", BUILTIN_MODELS, editable=False)
-        list_layout.addWidget(self._builtin_section)
-
-        # 自定义模型分组
-        self._custom_section = self._create_section("自定义", self._custom_models, editable=True)
-        list_layout.addWidget(self._custom_section)
+        # 直接显示模型行，不使用分组标题
+        if self._custom_models:
+            for m in self._custom_models:
+                row = self._create_model_row(m, editable=True)
+                list_layout.addWidget(row)
+        else:
+            # 没有模型时显示提示
+            empty_label = QLabel("暂无自定义模型，点击上方按钮添加")
+            empty_label.setObjectName("emptyLabel")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setFixedHeight(60)
+            list_layout.addWidget(empty_label)
 
         layout.addWidget(list_frame)
 
@@ -364,40 +382,36 @@ class ModelListWidget(QWidget):
 
         # 操作列
         action_layout = QHBoxLayout()
-        action_layout.setSpacing(8)
+        action_layout.setSpacing(6)
         action_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         if editable:
             model_id = model_data.get("id", "")
             model_name = model_data.get("model", "")
 
-            # 编辑按钮
-            edit_btn = QPushButton("✎")
-            edit_btn.setObjectName("rowActionBtn")
-            edit_btn.setFixedSize(24, 24)
-            edit_btn.setToolTip("编辑")
-            edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            edit_btn.clicked.connect(lambda checked, mid=model_id, mn=model_name: self._on_edit(mid, mn))
-            action_layout.addWidget(edit_btn)
+            # 配置按钮
+            config_btn = QPushButton("配置")
+            config_btn.setObjectName("rowActionBtn")
+            config_btn.setToolTip("配置模型")
+            config_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            config_btn.clicked.connect(lambda checked, mid=model_id, mn=model_name: self._on_edit(mid, mn))
+            action_layout.addWidget(config_btn)
+
+            # 测试按钮
+            test_btn = QPushButton("测试")
+            test_btn.setObjectName("rowActionBtn")
+            test_btn.setToolTip("测试连接")
+            test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            test_btn.clicked.connect(lambda checked, mid=model_id: self._on_test(mid))
+            action_layout.addWidget(test_btn)
 
             # 删除按钮
-            del_btn = QPushButton("🗑")
-            del_btn.setObjectName("rowActionBtn danger")
-            del_btn.setFixedSize(24, 24)
-            del_btn.setToolTip("删除")
+            del_btn = QPushButton("删除")
+            del_btn.setObjectName("rowActionBtnDelete")
+            del_btn.setToolTip("删除模型")
             del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             del_btn.clicked.connect(lambda checked, mid=model_id: self._on_delete(mid))
             action_layout.addWidget(del_btn)
-
-            # 启用/禁用开关
-            enabled = model_data.get("enabled", True)
-            toggle_btn = QPushButton("●" if enabled else "○")
-            toggle_btn.setObjectName("toggleBtn" if enabled else "toggleBtn off")
-            toggle_btn.setFixedSize(24, 24)
-            toggle_btn.setToolTip("启用" if enabled else "禁用")
-            toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            toggle_btn.clicked.connect(lambda checked, mid=model_id: self._on_toggle(mid))
-            action_layout.addWidget(toggle_btn)
         else:
             dash = QLabel("-")
             dash.setObjectName("dashLabel")
@@ -419,6 +433,7 @@ class ModelListWidget(QWidget):
                 result["provider"] = self._guess_provider(result["model"])
                 self._custom_models.append(result)
                 self._save_custom_models()
+                self._sync_to_config()
                 self.refresh()
                 self.model_changed.emit()
 
@@ -438,6 +453,7 @@ class ModelListWidget(QWidget):
                         self._custom_models[i] = result
                         break
                 self._save_custom_models()
+                self._sync_to_config()
                 self.refresh()
                 self.model_changed.emit()
 
@@ -452,8 +468,23 @@ class ModelListWidget(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self._custom_models = [m for m in self._custom_models if m.get("id") != model_id]
             self._save_custom_models()
+            self._sync_to_config()
             self.refresh()
             self.model_changed.emit()
+
+    def _on_test(self, model_id: str) -> None:
+        """测试模型连接"""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        data = next((m for m in self._custom_models if m.get("id") == model_id), None)
+        if not data:
+            return
+        
+        model_name = data.get("model", "")
+        QMessageBox.information(
+            self, "测试连接", 
+            f"正在测试模型: {model_name}\n\n(测试功能待实现)"
+        )
 
     def _on_toggle(self, model_id: str) -> None:
         """启用/禁用模型"""
@@ -462,6 +493,7 @@ class ModelListWidget(QWidget):
                 m["enabled"] = not m.get("enabled", True)
                 break
         self._save_custom_models()
+        self._sync_to_config()
         self.refresh()
         self.model_changed.emit()
 
@@ -483,20 +515,56 @@ class ModelListWidget(QWidget):
 
     def refresh(self) -> None:
         """刷新列表"""
-        # 重建整个 widget
+        # 找到 list_frame 并清除其中的内容
         layout = self.layout()
-        while layout.count():
-            item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-            elif item.layout():
-                # 清理子布局
-                sub = item.layout()
-                while sub.count():
-                    sub_item = sub.takeAt(0)
-                    if sub_item.widget():
-                        sub_item.widget().deleteLater()
-        self._setup_ui()
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, QFrame) and widget.objectName() == "listFrame":
+                    # 清除 list_frame 中的所有内容
+                    list_layout = widget.layout()
+                    if list_layout:
+                        while list_layout.count():
+                            child = list_layout.takeAt(0)
+                            if child.widget():
+                                child.widget().deleteLater()
+                        
+                        # 重新添加表头
+                        header = QFrame()
+                        header.setObjectName("listHeader")
+                        header.setFixedHeight(32)
+                        header_layout = QHBoxLayout(header)
+                        header_layout.setContentsMargins(12, 0, 12, 0)
+                        
+                        col_model = QLabel("模型")
+                        col_model.setObjectName("headerLabel")
+                        header_layout.addWidget(col_model, stretch=5)
+                        
+                        col_provider = QLabel("服务商")
+                        col_provider.setObjectName("headerLabel")
+                        col_provider.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        header_layout.addWidget(col_provider, stretch=2)
+                        
+                        col_action = QLabel("操作")
+                        col_action.setObjectName("headerLabel")
+                        col_action.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        header_layout.addWidget(col_action, stretch=2)
+                        
+                        list_layout.addWidget(header)
+                        
+                        # 重新添加模型行
+                        if self._custom_models:
+                            for m in self._custom_models:
+                                row = self._create_model_row(m, editable=True)
+                                list_layout.addWidget(row)
+                        else:
+                            empty_label = QLabel("暂无自定义模型，点击上方按钮添加")
+                            empty_label.setObjectName("emptyLabel")
+                            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                            empty_label.setFixedHeight(60)
+                            list_layout.addWidget(empty_label)
+                    return
 
     def _load_custom_models(self) -> None:
         """从文件加载自定义模型"""
@@ -516,6 +584,51 @@ class ModelListWidget(QWidget):
                 json.dump(self._custom_models, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"保存自定义模型失败: {e}")
+
+    def _sync_to_config(self) -> None:
+        """同步模型配置到 config.json"""
+        try:
+            from presentation.project.manager import project_manager
+            
+            # 获取当前项目路径
+            project_path = project_manager.project_path
+            if not project_path:
+                # 如果没有项目，保存到默认位置
+                config_file = Path("./config/config.json")
+            else:
+                # 保存到项目目录下的 config/config.json
+                config_file = Path(project_path) / "config" / "config.json"
+            
+            # 读取现有配置
+            config = {}
+            if config_file.exists():
+                try:
+                    with open(config_file, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                except Exception:
+                    config = {}
+            
+            # 将自定义模型转换为原有格式（deepseek/openai/anthropic）
+            for m in self._custom_models:
+                if m.get("enabled", True):
+                    provider_name = self._guess_provider(m.get("model", "")).lower()
+                    # 更新对应 provider 的配置
+                    if provider_name not in config:
+                        config[provider_name] = {}
+                    config[provider_name]["api_key"] = m.get("api_key", "")
+                    config[provider_name]["base_url"] = m.get("base_url", "")
+                    config[provider_name]["model"] = m.get("model", "")
+                    # 设置默认 provider 为第一个启用的模型
+                    if "default_provider" not in config or not config["default_provider"]:
+                        config["default_provider"] = provider_name
+            
+            # 保存到 config.json
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            logger.info(f"模型配置已同步到 {config_file}")
+        except Exception as e:
+            logger.error(f"同步配置失败: {e}")
 
     def get_enabled_custom_models(self) -> List[Dict[str, Any]]:
         """获取所有已启用的自定义模型"""
@@ -633,38 +746,41 @@ class ModelListWidget(QWidget):
                 font-size: 12px;
                 background: transparent;
             }
+            QLabel#emptyLabel {
+                color: """ + text_sec + """;
+                font-size: 13px;
+                background: transparent;
+                padding: 20px;
+            }
 
             /* 行操作按钮 */
             QPushButton#rowActionBtn {
                 color: """ + text_sec + """;
-                border: none;
-                background: transparent;
-                font-size: 13px;
+                background-color: """ + bg_ter + """;
+                border: 1px solid """ + border + """;
+                font-size: 11px;
                 border-radius: 4px;
+                padding: 4px 8px;
+                min-width: 40px;
             }
             QPushButton#rowActionBtn:hover {
                 color: """ + text_bright + """;
                 background-color: """ + bg_hover + """;
+                border-color: """ + accent + """;
             }
-            QPushButton#rowActionBtn[danger="true"]:hover {
+            QPushButton#rowActionBtnDelete {
                 color: """ + error + """;
+                background-color: """ + bg_ter + """;
+                border: 1px solid """ + border + """;
+                font-size: 11px;
+                border-radius: 4px;
+                padding: 4px 8px;
+                min-width: 40px;
             }
-
-            /* 开关按钮 */
-            QPushButton#toggleBtn {
-                color: """ + success + """;
-                border: none;
-                background: transparent;
-                font-size: 16px;
-            }
-            QPushButton#toggleBtn:hover {
-                color: """ + success + """;
-            }
-            QPushButton#toggleBtn#off {
-                color: """ + text_sec + """;
-            }
-            QPushButton#toggleBtn#off:hover {
-                color: """ + text + """;
+            QPushButton#rowActionBtnDelete:hover {
+                color: """ + text_bright + """;
+                background-color: """ + error + """;
+                border-color: """ + error + """;
             }
         """)
 
@@ -675,14 +791,14 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setMinimumSize(560, 600)
-        self.resize(560, 600)
+        self.setMinimumSize(400, 300)
+        self.resize(480, 360)
         self._setup_ui()
         self._apply_theme()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(0)
 
         self._model_list = ModelListWidget(self)
