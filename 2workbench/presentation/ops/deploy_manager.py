@@ -41,6 +41,7 @@ class DeployManager(BaseWidget):
         self._server_thread = None
         self._http_server = None
         self._setup_ui()
+        self._setup_eventbus()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -144,10 +145,10 @@ class DeployManager(BaseWidget):
         layout.addWidget(self._tabs)
 
     def _package_project(self) -> None:
-        """打包项目为 ZIP"""
-        import zipfile
+        """通过 EventBus 请求打包项目"""
         from PyQt6.QtWidgets import QFileDialog, QMessageBox
         from presentation.project.manager import project_manager
+        from foundation.event_bus import event_bus, Event
 
         if not project_manager.is_open:
             self._pack_log.append("❌ 没有打开的项目")
@@ -167,35 +168,55 @@ class DeployManager(BaseWidget):
         self._progress.setVisible(True)
         self._progress.setValue(0)
 
-        try:
-            self._pack_log.append(f"📦 开始打包: {name}")
-            self._pack_log.append(f"   项目路径: {path}")
+        # 保存输出路径供回调使用
+        self._pending_package_output = save_path
 
-            with zipfile.ZipFile(save_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                files = list(path.rglob("*"))
-                total = len([f for f in files if f.is_file()])
-                processed = 0
+        # 通过 EventBus 请求打包
+        self._pack_log.append(f"📦 请求打包: {name}")
+        self._pack_log.append(f"   项目路径: {path}")
 
-                for file in files:
-                    if file.is_file() and not file.name.endswith('.pyc'):
-                        arcname = file.relative_to(path.parent)
-                        zf.write(file, arcname)
-                        processed += 1
-                        progress = int((processed / total) * 100) if total > 0 else 100
-                        self._progress.setValue(progress)
+        event_bus.emit(Event(
+            type="ui.deploy.package_requested",
+            data={
+                "project_path": str(path),
+                "output_path": save_path,
+                "project_name": name,
+            }
+        ))
 
-            self._progress.setValue(100)
-            self._deploy_status = "idle"
-            self._status_label.setText("✅ 打包完成")
-            self._pack_log.append(f"✅ 打包完成: {save_path}")
-            logger.info(f"项目已打包到: {save_path}")
-            QMessageBox.information(self, "打包成功", f"项目已打包到:\n{save_path}")
-        except Exception as e:
-            self._deploy_status = "error"
-            self._status_label.setText("❌ 打包失败")
-            self._pack_log.append(f"❌ 打包失败: {e}")
-            logger.error(f"打包失败: {e}")
-            QMessageBox.critical(self, "打包失败", str(e))
+    def _on_package_completed(self, event: Event) -> None:
+        """打包完成回调"""
+        output_path = event.data.get("output_path", "")
+
+        self._progress.setValue(100)
+        self._deploy_status = "idle"
+        self._status_label.setText("✅ 打包完成")
+        self._pack_log.append(f"✅ 打包完成: {output_path}")
+        logger.info(f"项目已打包到: {output_path}")
+
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, "打包成功", f"项目已打包到:\n{output_path}")
+
+    def _on_package_failed(self, event: Event) -> None:
+        """打包失败回调"""
+        error = event.data.get("error", "未知错误")
+
+        self._deploy_status = "error"
+        self._status_label.setText("❌ 打包失败")
+        self._pack_log.append(f"❌ 打包失败: {error}")
+        logger.error(f"打包失败: {error}")
+
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "打包失败", str(error))
+
+    def _on_package_progress(self, event: Event) -> None:
+        """打包进度更新"""
+        progress = event.data.get("progress", 0)
+        message = event.data.get("message", "")
+
+        self._progress.setValue(progress)
+        if message:
+            self._pack_log.append(message)
 
     def _start_service(self) -> None:
         """启动 HTTP 服务"""
@@ -273,3 +294,10 @@ class DeployManager(BaseWidget):
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
         logger.info("服务已停止")
+
+    def _setup_eventbus(self) -> None:
+        """设置 EventBus 订阅"""
+        from foundation.event_bus import event_bus
+        event_bus.subscribe("feature.deploy.package_completed", self._on_package_completed)
+        event_bus.subscribe("feature.deploy.package_failed", self._on_package_failed)
+        event_bus.subscribe("feature.deploy.package_progress", self._on_package_progress)

@@ -60,15 +60,17 @@ class AgentRunner:
 
             self._current_agent = agent
 
-            # 发出运行开始事件
+            # 发出 Agent 准备完成事件
+            # Presentation 层应监听此事件并启动 AgentThread
             event_bus.emit(Event(
-                type="feature.agent.run_started",
-                data={"world_id": world_id, "user_input": user_input},
+                type="feature.agent.prepared",
+                data={
+                    "world_id": world_id,
+                    "user_input": user_input,
+                    "agent_ready": True,
+                },
             ))
-
-            # 运行 Agent（异步）
-            # 注意：实际运行应在独立线程中进行，这里只负责准备
-            # 真正的运行由 Presentation 层的 AgentThread 执行
+            logger.info("Agent 准备完成，等待 UI 层启动运行")
 
         except Exception as e:
             logger.error(f"Agent 运行准备失败: {e}")

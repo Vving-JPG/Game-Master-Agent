@@ -393,27 +393,25 @@ class ToolManagerWidget(BaseWidget):
             self.tools_changed.emit(self._tools)
             logger.info(f"自定义工具添加: {name}")
 
-            # === 注册到 Agent 工具集 ===
+            # === 通过 EventBus 请求注册到 Agent 工具集 ===
             self._register_tool_to_agent(tool)
 
     def _register_tool_to_agent(self, tool: ToolDefinition) -> None:
-        """注册工具到 Agent 工具集"""
+        """通过 EventBus 请求注册工具到 Agent 工具集"""
+        from foundation.event_bus import event_bus, Event
+
         try:
-            from feature.ai.tools import register_tool
-
-            # 创建默认 handler（实际项目中可能需要更复杂的逻辑）
-            def handler(**kwargs):
-                return f"工具 {tool.name} 执行: {kwargs}"
-
-            register_tool(
-                name=tool.name,
-                description=tool.description,
-                parameters_schema=tool.parameters,
-                handler=handler,
-            )
-            logger.info(f"工具已注册到 Agent: {tool.name}")
+            event_bus.emit(Event(
+                type="ui.tool.register_requested",
+                data={
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters_schema": tool.parameters,
+                }
+            ))
+            logger.info(f"工具注册请求已发送: {tool.name}")
         except Exception as e:
-            logger.error(f"工具注册到 Agent 失败: {e}")
+            logger.error(f"工具注册请求发送失败: {e}")
 
     def _run_test(self) -> None:
         """真实调用选中的工具"""

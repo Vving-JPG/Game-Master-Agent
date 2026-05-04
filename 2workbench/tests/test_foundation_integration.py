@@ -125,19 +125,21 @@ def test_llm_client_creation():
 def test_interface_contracts():
     """测试接口定义"""
     from foundation.base.interfaces import (
-        ILLMClient, IGameStateProvider, IMemoryStore, IToolExecutor, INotificationSink
+        IGameStateProvider, IMemoryStore, IToolExecutor, INotificationSink
     )
 
-    # 验证接口可以被继承
-    class MockLLM(ILLMClient):
-        async def chat(self, messages, **kwargs):
-            return {"content": "mock"}
+    # 验证接口可以被继承（ILLMClient 已删除，使用 INotificationSink 测试）
+    class MockNotificationSink(INotificationSink):
+        def __init__(self):
+            self.notifications = []
 
-        async def stream(self, messages, **kwargs):
-            yield {"type": "token", "content": "mock"}
+        def notify(self, event_type: str, data: dict) -> None:
+            self.notifications.append((event_type, data))
 
-    mock = MockLLM()
-    assert isinstance(mock, ILLMClient)
+    mock = MockNotificationSink()
+    mock.notify("test", {"message": "hello"})
+    assert len(mock.notifications) == 1
+    assert isinstance(mock, INotificationSink)
 
     print("✅ test_interface_contracts")
 

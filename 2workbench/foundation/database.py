@@ -171,13 +171,23 @@ def init_db(
                 return True
 
             # 执行 schema（使用 IF NOT EXISTS 避免重复创建错误）
-            if schema_path.exists():
-                sql = schema_path.read_text(encoding="utf-8")
-                db.executescript(sql)
-                if needs_migration:
-                    logger.info(f"数据库 schema 已更新 (v{current_version} -> v{SCHEMA_VERSION})")
-                else:
-                    logger.info(f"数据库 schema 已执行: {schema_path}")
+            if schema_path and schema_path.exists():
+                try:
+                    sql = schema_path.read_text(encoding="utf-8")
+                    db.executescript(sql)
+                    if needs_migration:
+                        logger.info(f"数据库 schema 已更新 (v{current_version} -> v{SCHEMA_VERSION})")
+                    else:
+                        logger.info(f"数据库 schema 已执行: {schema_path}")
+                except UnicodeDecodeError as e:
+                    logger.error(f"Schema 文件编码错误: {schema_path} - {e}")
+                    raise RuntimeError(f"Schema 文件编码错误，请确保使用 UTF-8 编码: {schema_path}") from e
+                except PermissionError as e:
+                    logger.error(f"Schema 文件权限错误: {schema_path} - {e}")
+                    raise RuntimeError(f"无法读取 Schema 文件，请检查文件权限: {schema_path}") from e
+                except Exception as e:
+                    logger.error(f"Schema 文件读取失败: {schema_path} - {e}")
+                    raise RuntimeError(f"Schema 文件读取失败: {schema_path}") from e
             else:
                 # 内存数据库模式下 schema 不存在是正常情况，不报错
                 if is_memory_db:

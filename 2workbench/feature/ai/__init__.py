@@ -3,6 +3,7 @@
 from feature.ai.graph import gm_graph, build_gm_graph
 from feature.ai.graph_compiler import graph_compiler
 from feature.ai.gm_agent import GMAgent
+from feature.ai.agent_runner import agent_runner, AgentRunner
 from feature.ai.nodes import (
     node_handle_event, node_build_prompt, node_llm_reasoning,
     node_parse_output, node_execute_commands, node_update_memory,
@@ -20,6 +21,7 @@ from feature.ai.events import (
 
 __all__ = [
     "gm_graph", "build_gm_graph", "graph_compiler", "GMAgent",
+    "agent_runner", "AgentRunner",
     "parse_llm_output", "PromptBuilder", "SkillLoader",
     "ALL_TOOLS", "get_tools_schema",
 ]

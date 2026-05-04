@@ -32,6 +32,7 @@ from PyQt6.QtGui import (
 )
 
 from foundation.logger import get_logger
+from foundation.event_bus import event_bus, Event
 from presentation.theme.manager import theme_manager
 
 logger = get_logger(__name__)

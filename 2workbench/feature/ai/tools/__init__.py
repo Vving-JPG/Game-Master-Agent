@@ -31,6 +31,9 @@ from feature.ai.tools.registry import (
     get_tools_schema,
 )
 
+# 导入并初始化工具注册服务（自动订阅 EventBus）
+from feature.ai.tools.tool_registration_service import tool_registration_service
+
 # 所有内置工具列表
 ALL_TOOLS = [
     roll_dice,

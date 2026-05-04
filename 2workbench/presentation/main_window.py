@@ -903,6 +903,9 @@ class MainWindow(QMainWindow):
         event_bus.subscribe("feature.ai.turn_end", self._on_turn_end)
         event_bus.subscribe("feature.ai.agent_error", self._on_agent_error_event)
         event_bus.subscribe("feature.ai.llm_stream_token", self._on_stream_token)
+        # Agent 运行准备完成事件
+        event_bus.subscribe("feature.agent.prepared", self._on_agent_prepared)
+        event_bus.subscribe("feature.agent.run_failed", self._on_agent_run_failed)
         # 调试面板事件
         self._setup_debugger_connections()
 
@@ -930,6 +933,37 @@ class MainWindow(QMainWindow):
         token = event.get("token", "")
         # 流式 token 更新（后续 Step 在控制台面板显示）
         pass
+
+    def _on_agent_prepared(self, event: Event) -> None:
+        """Agent 准备完成，启动运行线程"""
+        from feature.ai.agent_runner import agent_runner
+
+        user_input = event.data.get("user_input", "")
+        agent = agent_runner.get_current_agent()
+
+        if not agent:
+            logger.error("Agent 准备完成但未获取到实例")
+            self._run_action.setEnabled(True)
+            self._stop_action.setEnabled(False)
+            return
+
+        # 在后台线程中运行 Agent
+        self._agent_thread = AgentThread(agent, user_input)
+        self._agent_thread.finished.connect(self._on_agent_finished)
+        self._agent_thread.error.connect(self._on_agent_error)
+        self._agent_thread.stopped.connect(self._on_agent_stopped)
+        self._agent_thread.start()
+
+    def _on_agent_run_failed(self, event: Event) -> None:
+        """Agent 运行准备失败"""
+        error = event.data.get("error", "未知错误")
+        logger.error(f"Agent 运行准备失败: {error}")
+
+        # 恢复按钮状态
+        self._run_action.setEnabled(True)
+        self._stop_action.setEnabled(False)
+
+        QMessageBox.critical(self, "Agent 错误", f"运行准备失败: {error}")
 
     def _setup_debugger_connections(self) -> None:
         """连接调试面板到 Agent"""
@@ -1277,10 +1311,9 @@ class MainWindow(QMainWindow):
             self.showFullScreen()
 
     def _on_run_agent(self) -> None:
-        """运行 Agent"""
+        """运行 Agent — 通过 EventBus 请求，不解耦直接创建"""
         from presentation.project.manager import project_manager
         from foundation.config import settings
-        from feature.ai.gm_agent import GMAgent
 
         if not project_manager.is_open:
             self._show_message("请先打开一个项目")
@@ -1316,24 +1349,18 @@ class MainWindow(QMainWindow):
         self._stop_action.setEnabled(True)
         self._show_message("Agent 运行中...")
 
-        # 创建 Agent 实例并运行
-        from foundation.config import settings
-        self._current_agent = GMAgent(world_id=1, db_path=settings.database_path)
+        # 保存用户输入供后续使用
+        self._pending_user_input = user_input
 
-        # === 使用项目编译的图 ===
-        try:
-            compiled_graph = project_manager.compile_graph()
-            self._current_agent.set_graph(compiled_graph, source="json")
-            logger.info("使用项目编译的图运行 Agent")
-        except Exception as e:
-            logger.warning(f"项目图编译失败，使用默认图: {e}")
-
-        # 在后台线程中运行 Agent
-        self._agent_thread = AgentThread(self._current_agent, user_input)
-        self._agent_thread.finished.connect(self._on_agent_finished)
-        self._agent_thread.error.connect(self._on_agent_error)
-        self._agent_thread.stopped.connect(self._on_agent_stopped)
-        self._agent_thread.start()
+        # 通过 EventBus 请求 Agent 准备
+        event_bus.emit(Event(
+            type="ui.agent.run_requested",
+            data={
+                "world_id": 1,
+                "user_input": user_input,
+                "db_path": settings.database_path,
+            }
+        ))
 
     def _on_agent_finished(self, result: dict) -> None:
         """Agent 运行完成回调"""
