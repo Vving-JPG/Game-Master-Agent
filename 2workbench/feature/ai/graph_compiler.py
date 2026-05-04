@@ -38,6 +38,7 @@ from typing import Any, Callable
 from langgraph.graph import StateGraph, START, END
 
 from core.state import AgentState
+from foundation.event_bus import event_bus, Event
 from foundation.logger import get_logger
 
 logger = get_logger(__name__)
@@ -204,3 +205,36 @@ class GraphCompiler:
 
 # 全局单例
 graph_compiler = GraphCompiler()
+
+
+def _on_graph_save_requested(event: Event) -> None:
+    """处理图保存请求事件
+
+    监听 ui.graph.save_requested 事件，编译图并发出完成通知。
+    """
+    graph_data = event.data.get("graph_data", {})
+    if not graph_data:
+        logger.warning("收到空的图数据，跳过编译")
+        return
+
+    try:
+        compiled = graph_compiler.compile(graph_data)
+        logger.info(f"图编译成功: {len(graph_data.get('nodes', []))} 节点")
+
+        # 发出编译完成事件
+        event_bus.emit(Event(type="feature.graph.compiled", data={
+            "graph_data": graph_data,
+            "compiled": compiled,
+            "node_count": len(graph_data.get("nodes", [])),
+            "edge_count": len(graph_data.get("edges", [])),
+        }))
+    except Exception as e:
+        logger.error(f"图编译失败: {e}")
+        event_bus.emit(Event(type="feature.graph.compile_failed", data={
+            "error": str(e),
+            "graph_data": graph_data,
+        }))
+
+
+# 注册事件监听
+event_bus.subscribe("ui.graph.save_requested", _on_graph_save_requested)

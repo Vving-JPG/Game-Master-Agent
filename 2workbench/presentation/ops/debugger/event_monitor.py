@@ -21,16 +21,19 @@ logger = get_logger(__name__)
 
 
 class EventMonitor(BaseWidget):
-    """EventBus 事件监视器"""
+    """EventBus 事件监视器
+
+    使用通配符订阅捕获所有事件，不再使用 monkey-patching。
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._event_count = 0
         self._filter_text = ""
         self._paused = False
-        self._original_emit = None
+        self._subscription_id: str | None = None
         self._setup_ui()
-        self._install_hook()
+        self._subscribe_all()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -69,32 +72,28 @@ class EventMonitor(BaseWidget):
         )
         layout.addWidget(self._output)
 
-    def _install_hook(self) -> None:
-        """安装 EventBus 钩子，捕获所有事件"""
-        self._original_emit = event_bus.emit
-        event_bus.emit = self._hooked_emit
-        logger.info("EventBus 钩子已安装")
+    def _subscribe_all(self) -> None:
+        """订阅所有事件（使用通配符 *）"""
+        self._subscription_id = event_bus.subscribe("*", self._on_event)
+        logger.info("EventBus 事件监视器已启动（通配符订阅）")
 
-    def _hooked_emit(self, event: Event) -> list:
-        """钩子函数：捕获事件并转发"""
-        if not self._paused:
-            self._on_event(event)
-        return self._original_emit(event)
-
-    def _uninstall_hook(self) -> None:
-        """卸载 EventBus 钩子"""
-        if self._original_emit is not None:
-            event_bus.emit = self._original_emit
-            self._original_emit = None
-            logger.info("EventBus 钩子已卸载")
+    def _unsubscribe_all(self) -> None:
+        """取消订阅"""
+        # 注意：当前 EventBus 的 subscribe 返回 None，无法取消订阅
+        # 使用 _paused 标志来停止处理事件
+        self._paused = True
+        logger.info("EventBus 事件监视器已暂停")
 
     def closeEvent(self, event) -> None:
-        """关闭时恢复原始 emit"""
-        self._uninstall_hook()
+        """关闭时取消订阅"""
+        self._unsubscribe_all()
         super().closeEvent(event)
 
     def _on_event(self, event: Event) -> None:
         """处理捕获的事件"""
+        if self._paused:
+            return
+
         if self._filter_text and self._filter_text not in event.type:
             return
 
@@ -107,39 +106,40 @@ class EventMonitor(BaseWidget):
         color = theme_manager.get_color("text_primary")
         if "error" in event.type.lower():
             color = theme_manager.get_color("error")
-        elif "stream" in event.type.lower():
-            color = theme_manager.get_color("success")
-        elif "turn" in event.type.lower():
-            color = theme_manager.get_color("info")
-        elif "command" in event.type.lower():
+        elif "warning" in event.type.lower():
             color = theme_manager.get_color("warning")
+        elif "success" in event.type.lower() or "completed" in event.type.lower():
+            color = theme_manager.get_color("success")
 
-        text_secondary = theme_manager.get_color("text_secondary")
-        text_disabled = theme_manager.get_color("border")  # 使用边框色作为替代
-        self._output.append(
-            f'<span style="color: {text_secondary};">[{timestamp}]</span> '
-            f'<span style="color: {color};">{event.type}</span> '
-            f'<span style="color: {text_disabled};">← {source}</span> '
-            f'<span style="color: {text_secondary};">{data_preview}</span>'
-        )
+        # 格式化输出
+        line = f'<span style="color: {color}">[{timestamp}] {event.type}</span>'
+        line += f' <span style="color: gray">from {source}</span>'
+        line += f'<br>  {data_preview}</br>'
 
+        self._output.append(line)
         self._count_label.setText(f"事件: {self._event_count}")
 
         # 限制行数
-        if self._output.document().blockCount() > 2000:
-            cursor = self._output.textCursor()
-            cursor.movePosition(cursor.MoveOperation.Start)
-            cursor.movePosition(cursor.MoveOperation.Down, cursor.KeepAnchor, 500)
-            cursor.removeSelectedText()
+        if self._event_count % 100 == 0:
+            self._trim_output()
+
+    def _trim_output(self) -> None:
+        """限制输出行数"""
+        lines = self._output.toPlainText().split("\n")
+        if len(lines) > 1000:
+            self._output.setPlainText("\n".join(lines[-500:]))
 
     def _on_filter_changed(self, text: str) -> None:
-        self._filter_text = text
+        """过滤文本变化"""
+        self._filter_text = text.lower()
 
     def _toggle_pause(self) -> None:
+        """暂停/恢复"""
         self._paused = not self._paused
         self._btn_pause.setText("▶ 继续" if self._paused else "⏸ 暂停")
 
     def clear(self) -> None:
+        """清空显示"""
         self._output.clear()
         self._event_count = 0
         self._count_label.setText("事件: 0")

@@ -113,29 +113,6 @@ class GMAgent:
 
         return state
 
-    def run_sync(self, user_input: str, event_type: str = "player_action") -> dict[str, Any]:
-        """同步执行一轮 Agent（阻塞）
-
-        Args:
-            user_input: 玩家输入
-            event_type: 事件类型
-
-        Returns:
-            执行结果字典
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # 在 Qt 事件循环中，使用 qasync
-                import qasync
-                future = qasync.ensure_future(self.run(user_input, event_type))
-                # 注意: 这里不能直接 await，需要由调用方处理
-                return {"status": "async_scheduled", "message": "已调度异步执行"}
-            else:
-                return loop.run_until_complete(self.run(user_input, event_type))
-        except RuntimeError:
-            return asyncio.run(self.run(user_input, event_type))
-
     async def run(self, user_input: str, event_type: str = "player_action") -> dict[str, Any]:
         """异步执行一轮 Agent
 
@@ -234,6 +211,33 @@ class GMAgent:
         finally:
             # 清理工具上下文
             set_tool_context(None)
+
+    def run_sync(self, user_input: str, event_type: str = "player_action") -> dict[str, Any]:
+        """同步执行一轮 Agent（阻塞）
+
+        注意: 此方法在事件循环已运行时（如 Qt 应用）可能无法正常工作。
+        在 Presentation 层，建议使用 AgentThread 在独立线程中运行。
+
+        Args:
+            user_input: 玩家输入
+            event_type: 事件类型
+
+        Returns:
+            执行结果字典
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 事件循环已在运行，无法同步执行
+                logger.warning("事件循环已在运行，run_sync 无法执行。请在独立线程中使用 asyncio.run() 或 AgentThread")
+                return {
+                    "status": "error",
+                    "error": "事件循环已在运行，无法同步执行。请使用异步接口或在独立线程中运行。",
+                }
+            else:
+                return loop.run_until_complete(self.run(user_input, event_type))
+        except RuntimeError:
+            return asyncio.run(self.run(user_input, event_type))
 
     async def stream(self, user_input: str, event_type: str = "player_action") -> AsyncGenerator[dict, None]:
         """流式执行一轮 Agent

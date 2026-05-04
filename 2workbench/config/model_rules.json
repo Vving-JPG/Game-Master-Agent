@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "name": "critical_narrative",
+      "provider": "deepseek",
+      "model": "deepseek-reasoner",
+      "keywords": [
+        "战斗", "boss", "决战", "死亡", "结局", "选择", "命运",
+        "重要", "秘密", "真相", "最终", "关键", "转折", "危机"
+      ],
+      "min_turn_length": 20,
+      "score": 10
+    },
+    {
+      "name": "npc_deep_dialogue",
+      "provider": "deepseek",
+      "model": "deepseek-reasoner",
+      "keywords": ["关系", "信任", "背叛", "过去", "回忆", "秘密", "身世"],
+      "score": 8
+    },
+    {
+      "name": "standard_narrative",
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "score": 0
+    }
+  ]
+}

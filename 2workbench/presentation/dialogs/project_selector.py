@@ -5,9 +5,6 @@
 """
 from __future__ import annotations
 
-import json
-import shutil
-from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -22,6 +19,7 @@ from PyQt6.QtGui import QFont, QColor, QPen, QBrush, QPainter
 
 from foundation.logger import get_logger
 from presentation.theme.manager import theme_manager
+from feature.project import project_manager
 
 logger = get_logger(__name__)
 
@@ -548,94 +546,12 @@ class ProjectSelector(QDialog):
         self._apply_filter_and_sort()
 
     def _scan_projects(self) -> List[Dict[str, Any]]:
-        """扫描项目目录和最近打开的项目"""
-        projects = []
-        project_paths = set()  # 用于去重
+        """扫描项目目录和最近打开的项目
 
-        def normalize_path(p: str) -> str:
-            """标准化路径用于比较"""
-            return p.replace("\\", "/").lower()
-
-        # 1. 首先加载最近打开的项目（包括外部路径如D盘）
-        try:
-            from presentation.project.manager import recent_projects_manager
-            recent_projects = recent_projects_manager.get_all()
-            for recent in recent_projects:
-                path = recent.get("path", "")
-                if not path:
-                    continue
-                # 标准化路径用于比较
-                normalized = normalize_path(path)
-                if normalized in project_paths:
-                    continue
-                if not Path(path).exists():
-                    continue
-
-                project_paths.add(normalized)
-                # 尝试读取项目信息
-                project_file = Path(path) / "project.json"
-                if project_file.exists():
-                    try:
-                        with open(project_file, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        mtime = Path(path).stat().st_mtime
-                        modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-                        projects.append({
-                            "name": data.get("name", recent.get("name", Path(path).name.replace(".agent", ""))),
-                            "path": path,
-                            "template": data.get("template", recent.get("template", "blank")),
-                            "modified": modified,
-                            "created": data.get("created", modified),
-                            "is_recent": True,  # 标记为最近打开的项目
-                        })
-                    except Exception:
-                        # 如果读取失败，使用最近列表中的信息
-                        projects.append({
-                            "name": recent.get("name", Path(path).name.replace(".agent", "")),
-                            "path": path,
-                            "template": recent.get("template", "blank"),
-                            "modified": recent.get("last_opened", "")[:10] if recent.get("last_opened") else "",
-                            "created": "",
-                            "is_recent": True,
-                        })
-        except Exception as e:
-            logger.warning(f"加载最近项目失败: {e}")
-
-        # 2. 扫描 workspace/data 目录下的项目
-        try:
-            from presentation.project.manager import project_manager
-            workspace = project_manager.workspace_dir / "data" if project_manager.workspace_dir else Path("./data")
-        except Exception:
-            workspace = Path("./data")
-
-        if workspace.exists():
-            for project_dir in workspace.iterdir():
-                if project_dir.is_dir() and project_dir.suffix == ".agent":
-                    path_str = str(project_dir)
-                    normalized = normalize_path(path_str)
-                    if normalized in project_paths:
-                        continue  # 跳过已添加的
-                    project_paths.add(normalized)
-
-                    project_file = project_dir / "project.json"
-                    if project_file.exists():
-                        try:
-                            with open(project_file, "r", encoding="utf-8") as f:
-                                data = json.load(f)
-                            mtime = project_dir.stat().st_mtime
-                            modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-                            projects.append({
-                                "name": data.get("name", project_dir.name),
-                                "path": path_str,
-                                "template": data.get("template", "blank"),
-                                "modified": modified,
-                                "created": data.get("created", modified),
-                                "is_recent": False,
-                            })
-                        except Exception as e:
-                            logger.warning(f"读取项目失败 {project_dir}: {e}")
-
-        return projects
+        现在委托给 ProjectManager 处理。
+        """
+        workspace = Path.cwd() / "data"
+        return project_manager.scan_projects(workspace)
 
     def _apply_filter_and_sort(self) -> None:
         """应用筛选和排序"""
@@ -774,20 +690,12 @@ class ProjectSelector(QDialog):
 
         if ok and new_name and new_name != old_name:
             try:
-                project_path = Path(self._selected_project["path"])
-                project_file = project_path / "project.json"
-
-                if project_file.exists():
-                    with open(project_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-
-                    data["name"] = new_name
-
-                    with open(project_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-
+                project_path = self._selected_project["path"]
+                if project_manager.rename_project(project_path, new_name):
                     logger.info(f"项目重命名: {old_name} -> {new_name}")
                     self._load_projects()
+                else:
+                    QMessageBox.critical(self, "错误", "重命名失败")
             except Exception as e:
                 logger.error(f"重命名项目失败: {e}")
                 QMessageBox.critical(self, "错误", f"重命名失败: {e}")
@@ -806,33 +714,14 @@ class ProjectSelector(QDialog):
 
         if ok and new_name:
             try:
-                src_path = Path(self._selected_project["path"])
+                src_path = self._selected_project["path"]
+                dst_path = project_manager.duplicate_project(src_path, new_name)
 
-                # 生成新的项目目录名
-                new_dir_name = new_name.replace(" ", "_") + ".agent"
-                dst_path = src_path.parent / new_dir_name
-
-                if dst_path.exists():
-                    QMessageBox.warning(self, "警告", "目标项目已存在")
-                    return
-
-                # 复制项目
-                shutil.copytree(src_path, dst_path)
-
-                # 更新 project.json
-                project_file = dst_path / "project.json"
-                if project_file.exists():
-                    with open(project_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-
-                    data["name"] = new_name
-                    data["created"] = datetime.now().strftime("%Y-%m-%d")
-
-                    with open(project_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-
-                logger.info(f"项目副本已创建: {new_name}")
-                self._load_projects()
+                if dst_path:
+                    logger.info(f"项目副本已创建: {new_name}")
+                    self._load_projects()
+                else:
+                    QMessageBox.warning(self, "警告", "目标项目已存在或创建失败")
             except Exception as e:
                 logger.error(f"创建副本失败: {e}")
                 QMessageBox.critical(self, "错误", f"创建副本失败: {e}")
@@ -859,9 +748,11 @@ class ProjectSelector(QDialog):
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                shutil.rmtree(project_path)
-                logger.info(f"项目已移除: {project_path}")
-                self._load_projects()
+                if project_manager.delete_project(project_path):
+                    logger.info(f"项目已移除: {project_path}")
+                    self._load_projects()
+                else:
+                    QMessageBox.critical(self, "错误", "移除项目失败")
             except Exception as e:
                 logger.error(f"移除项目失败: {e}")
                 QMessageBox.critical(self, "错误", f"移除项目失败: {e}")

@@ -125,8 +125,8 @@ class OpenAICompatibleClient(BaseLLMClient):
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": self._to_openai_messages(messages),
-            "temperature": temperature or self._default_temperature,
-            "max_tokens": max_tokens or self._default_max_tokens,
+            "temperature": temperature if temperature is not None else self._default_temperature,
+            "max_tokens": max_tokens if max_tokens is not None else self._default_max_tokens,
         }
         if tools:
             kwargs["tools"] = tools
@@ -191,8 +191,8 @@ class OpenAICompatibleClient(BaseLLMClient):
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": self._to_openai_messages(messages),
-            "temperature": temperature or self._default_temperature,
-            "max_tokens": max_tokens or self._default_max_tokens,
+            "temperature": temperature if temperature is not None else self._default_temperature,
+            "max_tokens": max_tokens if max_tokens is not None else self._default_max_tokens,
             "stream": True,
             "stream_options": {"include_usage": True},
         }

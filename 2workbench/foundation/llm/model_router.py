@@ -24,7 +24,9 @@
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from foundation.config import Settings, settings
@@ -50,24 +52,8 @@ class RoutingRule:
     max_tokens: int | None = None
 
 
-# 默认路由规则
-DEFAULT_RULES: list[dict[str, Any]] = [
-    {
-        "name": "critical_narrative",
-        "provider": "deepseek",
-        "model": "deepseek-reasoner",
-        "keywords": ["战斗", "boss", "决战", "死亡", "结局", "选择", "命运",
-                      "重要", "秘密", "真相", "最终", "关键", "转折", "危机"],
-        "min_turn_length": 20,
-        "score": 10,
-    },
-    {
-        "name": "npc_deep_dialogue",
-        "provider": "deepseek",
-        "model": "deepseek-reasoner",
-        "keywords": ["关系", "信任", "背叛", "过去", "回忆", "秘密", "身世"],
-        "score": 8,
-    },
+# 最小默认规则（仅用于回退，不包含业务关键词）
+_MINIMAL_DEFAULT_RULES: list[dict[str, Any]] = [
     {
         "name": "standard_narrative",
         "provider": "deepseek",
@@ -75,6 +61,33 @@ DEFAULT_RULES: list[dict[str, Any]] = [
         "score": 0,  # 默认规则
     },
 ]
+
+
+def _load_rules_from_config() -> list[dict[str, Any]]:
+    """从配置文件加载路由规则
+
+    配置文件路径: 2workbench/config/model_rules.json
+    如果配置文件不存在，返回最小默认规则。
+
+    Returns:
+        路由规则列表
+    """
+    config_path = Path(__file__).parent.parent.parent / "config" / "model_rules.json"
+
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                rules = data.get("rules", [])
+                if rules:
+                    logger.info(f"已从配置文件加载 {len(rules)} 条路由规则")
+                    return rules
+        except Exception as e:
+            logger.warning(f"加载路由规则配置文件失败: {e}")
+    else:
+        logger.debug(f"路由规则配置文件不存在: {config_path}，使用最小默认规则")
+
+    return _MINIMAL_DEFAULT_RULES
 
 
 class ModelRouter:
@@ -94,7 +107,7 @@ class ModelRouter:
         self._settings = settings_obj or settings
         self._clients: dict[str, BaseLLMClient] = {}
         self._rules: list[RoutingRule] = []
-        self._load_rules(DEFAULT_RULES)
+        self._load_rules(_load_rules_from_config())
         self._init_clients()
 
     def _load_rules(self, rules: list[dict[str, Any]]) -> None:
@@ -254,7 +267,7 @@ class ModelRouter:
         """重新加载配置和客户端"""
         self._clients.clear()
         self._rules.clear()
-        self._load_rules(DEFAULT_RULES)
+        self._load_rules(_load_rules_from_config())
         self._init_clients()
         logger.info("模型路由器已重新加载")
 

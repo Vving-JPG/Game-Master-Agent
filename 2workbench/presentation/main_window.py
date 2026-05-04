@@ -37,6 +37,7 @@ from foundation.logger import get_logger
 from presentation.theme.manager import theme_manager
 from presentation.widgets.base import BaseWidget
 from presentation.widgets.styled_button import StyledButton
+from presentation.agent_thread import AgentThread
 
 logger = get_logger(__name__)
 
@@ -1328,54 +1329,6 @@ class MainWindow(QMainWindow):
             logger.warning(f"项目图编译失败，使用默认图: {e}")
 
         # 在后台线程中运行 Agent
-        import asyncio
-        from PyQt6.QtCore import QThread, pyqtSignal
-
-        class AgentThread(QThread):
-            finished = pyqtSignal(dict)
-            error = pyqtSignal(str)
-            stopped = pyqtSignal()
-
-            def __init__(self, agent, user_input):
-                super().__init__()
-                self.agent = agent
-                self.user_input = user_input
-                self._should_stop = False
-
-            def stop(self):
-                """请求停止线程（协作式取消）"""
-                self._should_stop = True
-                self.requestInterruption()
-
-            def run(self):
-                try:
-                    # 使用 asyncio 运行异步方法
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-
-                    # 创建任务并定期检查取消标志
-                    task = loop.create_task(self.agent.run(self.user_input))
-
-                    # 定期检查是否请求停止
-                    while not task.done() and not self._should_stop:
-                        loop.run_until_complete(asyncio.sleep(0.1))
-
-                    if self._should_stop:
-                        task.cancel()
-                        try:
-                            loop.run_until_complete(task)
-                        except asyncio.CancelledError:
-                            pass
-                        self.stopped.emit()
-                    else:
-                        result = task.result()
-                        self.finished.emit(result)
-
-                    loop.close()
-                except Exception as e:
-                    if not self._should_stop:
-                        self.error.emit(str(e))
-
         self._agent_thread = AgentThread(self._current_agent, user_input)
         self._agent_thread.finished.connect(self._on_agent_finished)
         self._agent_thread.error.connect(self._on_agent_error)
@@ -1438,12 +1391,12 @@ class MainWindow(QMainWindow):
     def _show_ops_panel(self, panel_type: str) -> None:
         """显示运营工具面板"""
         from presentation.ops.debugger import RuntimePanel, EventMonitor
-        from presentation.ops.evaluator import EvalWorkbench
-        from presentation.ops.knowledge import KnowledgeEditor
-        from presentation.ops.safety import SafetyPanel
-        from presentation.ops.multi_agent import MultiAgentOrchestrator
-        from presentation.ops.logger_panel import LogViewer
-        from presentation.ops.deploy import DeployManager
+        from presentation.ops.eval_workbench import EvalWorkbench
+        from presentation.ops.knowledge_editor import KnowledgeEditor
+        from presentation.ops.safety_panel import SafetyPanel
+        from presentation.ops.multi_agent_orchestrator import MultiAgentOrchestrator
+        from presentation.ops.log_viewer import LogViewer
+        from presentation.ops.deploy_manager import DeployManager
 
         panel_map = {
             "debugger": ("🔧 调试器", RuntimePanel),

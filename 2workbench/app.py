@@ -180,7 +180,9 @@ def main() -> None:
     from foundation.database import init_db
     db_path = PROJECT_ROOT / "data" / "default.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    init_db(db_path=str(db_path))
+    # 显式传入 schema 路径，避免 Foundation 层硬编码 Core 层路径
+    schema_path = PROJECT_ROOT / "core" / "models" / "schema.sql"
+    init_db(db_path=str(db_path), schema_path=str(schema_path))
 
     # 6. 启用 Feature 系统
     from feature import (

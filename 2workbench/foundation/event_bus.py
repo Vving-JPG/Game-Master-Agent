@@ -193,7 +193,8 @@ class EventBus:
                 continue
 
             # 目标过滤：当事件有 target 时，只处理 target 匹配的订阅者
-            if event.target and sub.handler.__qualname__ != event.target:
+            # 使用 __module__ 进行匹配，比 __qualname__ 更可靠
+            if event.target and sub.handler.__module__ != event.target:
                 continue
 
             try:

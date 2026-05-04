@@ -1,7 +1,14 @@
-"""Feature Services — 功能层服务
+"""Feature 层服务模块
 
-提供与 UI 解耦的业务功能服务。
+提供各种业务服务，如 API 测试、模型管理等。
 """
 from feature.services.api_tester import ApiTester, ApiTestWorker, TestResult
+from feature.services.model_manager import ModelManager, ModelConfig
 
-__all__ = ["ApiTester", "ApiTestWorker", "TestResult"]
+__all__ = [
+    "ApiTester",
+    "ApiTestWorker",
+    "TestResult",
+    "ModelManager",
+    "ModelConfig",
+]

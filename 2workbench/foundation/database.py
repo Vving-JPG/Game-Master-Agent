@@ -127,20 +127,33 @@ def init_db(
     """初始化数据库（执行 schema.sql）
 
     Args:
-        schema_path: SQL schema 文件路径
+        schema_path: SQL schema 文件路径。必须由调用方显式传入，
+                    不再在 Foundation 层硬编码 Core 层路径。
         db_path: 数据库文件路径，支持 `:memory:` 内存数据库
 
     Returns:
         是否成功初始化
+
+    Raises:
+        ValueError: 如果 schema_path 为 None 且不是内存数据库模式
     """
     # 处理内存数据库特殊值
     is_memory_db = str(db_path) == ":memory:" if db_path else False
 
     if schema_path is None:
-        # 默认 schema 路径
-        schema_path = Path(__file__).parent.parent / "core" / "models" / "schema.sql"
+        if is_memory_db:
+            # 内存数据库模式下，schema 可选
+            schema_path = None
+        else:
+            # 非内存数据库模式下，schema_path 必须由调用方传入
+            raise ValueError(
+                "schema_path 必须由调用方显式传入。"
+                "Foundation 层不再硬编码 Core 层路径。"
+            )
     else:
         schema_path = Path(schema_path)
+        if not schema_path.exists():
+            raise FileNotFoundError(f"Schema 文件不存在: {schema_path}")
 
     try:
         with get_db(db_path) as db:

@@ -664,20 +664,15 @@ class GraphEditorWidget(QWidget):
             QMessageBox.critical(self, "保存失败", f"保存图时出错: {e}")
             return
 
-        # 触发编译
+        # 触发编译（通过 EventBus 请求，不直接调用 Feature 层）
         try:
-            from feature.ai.graph_compiler import graph_compiler
-            compiled = graph_compiler.compile(graph_data)
-
-            # 通过 EventBus 通知，让持有 GMAgent 的组件更新
-            from foundation.event_bus import event_bus, Event
-            event_bus.emit(Event(type="ui.graph.compiled", data={
+            event_bus.emit(Event(type="ui.graph.save_requested", data={
                 "graph_data": graph_data,
                 "node_count": len(graph_data["nodes"]),
                 "edge_count": len(graph_data["edges"]),
             }))
-            logger.info("图编译成功，已通过 EventBus 通知")
-            QMessageBox.information(self, "保存成功", f"图已保存并编译 ({len(graph_data['nodes'])} 节点)")
+            logger.info("图保存请求已发出，等待编译完成通知")
+            QMessageBox.information(self, "保存成功", f"图已保存 ({len(graph_data['nodes'])} 节点)，编译请求已发送")
         except Exception as e:
-            logger.error(f"图编译失败: {e}")
-            QMessageBox.warning(self, "编译警告", f"图已保存但编译失败: {e}")
+            logger.error(f"图编译请求失败: {e}")
+            QMessageBox.warning(self, "编译警告", f"图已保存但编译请求失败: {e}")

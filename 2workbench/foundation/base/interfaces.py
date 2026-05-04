@@ -8,20 +8,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class ILLMClient(ABC):
-    """LLM 客户端接口（Foundation 层提供，Feature 层使用）"""
-
-    @abstractmethod
-    async def chat(self, messages: list[dict], **kwargs) -> dict[str, Any]:
-        """对话"""
-        ...
-
-    @abstractmethod
-    async def stream(self, messages: list[dict], **kwargs):
-        """流式对话"""
-        ...
-
-
 class IGameStateProvider(ABC):
     """游戏状态提供者接口（Core 层定义，Feature 层实现）"""
 
