@@ -1,6 +1,12 @@
-"""编辑器组件"""
+"""编辑器组件 — Agent 管理器"""
 from presentation.editor.graph_editor import GraphEditorWidget, GraphScene
 from presentation.editor.prompt_editor import PromptEditorWidget
-from presentation.editor.tool_manager import ToolManagerWidget
+from presentation.editor.prompt_tester import PromptTesterWidget
+from presentation.editor.skill_manager import SkillManagerWidget
 
-__all__ = ["GraphEditorWidget", "GraphScene", "PromptEditorWidget", "ToolManagerWidget"]
+__all__ = [
+    "GraphEditorWidget", "GraphScene",
+    "PromptEditorWidget",
+    "PromptTesterWidget",
+    "SkillManagerWidget",
+]

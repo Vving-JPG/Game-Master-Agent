@@ -94,11 +94,23 @@ async def node_build_prompt(state: AgentState) -> dict[str, Any]:
     skill_contents = []
     active_skills = state.get("active_skills", [])
     if not active_skills:
-        # 自动加载 Skill
+        # 自动加载 Skill（优先从项目目录加载）
         try:
             from feature.ai.skill_loader import SkillLoader
-            skills_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'skills')
-            if os.path.isdir(skills_dir):
+            from feature.project import project_manager
+
+            # 优先使用项目中的 skills 目录
+            skills_dir = None
+            if project_manager.is_open and project_manager.project_path:
+                project_skills = project_manager.project_path / "skills"
+                if project_skills.exists():
+                    skills_dir = str(project_skills)
+
+            # 回退到默认 skills 目录
+            if not skills_dir:
+                skills_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'skills')
+
+            if skills_dir and os.path.isdir(skills_dir):
                 loader = SkillLoader(skills_dir)
                 relevant = loader.get_relevant_skills(
                     user_input=state.get("current_event", ""),
@@ -293,14 +305,15 @@ async def node_execute_commands(state: AgentState) -> dict[str, Any]:
             results.append({"intent": intent, "success": False, "result": f"error: {e}"})
             logger.error(f"命令执行失败 ({intent}): {e}")
 
-    # 将工具执行结果格式化并追加到对话历史，让 LLM 知道执行结果
+    # 将工具执行结果格式化为消息，通过返回值更新状态
+    new_messages = []
     if results:
         results_text = "\n".join([
             f"[工具结果] {r.get('intent', 'unknown')}: {r.get('result', '无结果')}"
             for r in results
         ])
         if results_text:
-            state["messages"].append({
+            new_messages.append({
                 "role": "tool",
                 "content": results_text
             })
@@ -309,7 +322,9 @@ async def node_execute_commands(state: AgentState) -> dict[str, Any]:
         "executed": len(results),
     }))
 
+    # 通过返回值更新状态，包含 messages 和 command_results
     return {
+        "messages": new_messages,
         "command_results": results,
     }
 
@@ -381,8 +396,27 @@ async def route_after_parse(state: AgentState) -> str:
 # ===== System Prompt =====
 
 def _get_system_prompt() -> str:
-    """获取基础 System Prompt"""
-    return """你是一个沉浸式游戏主持人（Game Master）。你的职责是：
+    """获取基础 System Prompt
+
+    优先从当前项目的 prompts/system.md 加载，
+    如果失败则返回默认的硬编码 prompt。
+    """
+    # 尝试从项目加载
+    try:
+        from feature.project import project_manager
+        if project_manager.is_open:
+            project_prompt = project_manager.load_prompt("system")
+            if project_prompt:
+                return project_prompt
+    except Exception:
+        pass  # 加载失败时使用默认 prompt
+
+    # 默认硬编码 prompt
+    return _DEFAULT_SYSTEM_PROMPT
+
+
+# 默认系统提示词（当项目没有 system.md 时使用）
+_DEFAULT_SYSTEM_PROMPT = """你是一个沉浸式游戏主持人（Game Master）。你的职责是：
 
 1. **叙事** — 生动地描述游戏世界、场景、NPC 行为和事件
 2. **裁判** — 公平地判定玩家行动的结果

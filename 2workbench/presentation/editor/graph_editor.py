@@ -62,6 +62,7 @@ class GraphNodeItem(QGraphicsRectItem):
         node_type: str = "custom",
         label: str = "",
         position: dict | None = None,
+        readonly: bool = False,
     ):
         width = 160
         height = 60
@@ -70,6 +71,7 @@ class GraphNodeItem(QGraphicsRectItem):
         self.node_id = node_id
         self.node_type = node_type
         self.label = label or node_id
+        self._readonly = readonly
 
         # 位置
         x = position.get("x", 0) if position else 0
@@ -84,7 +86,8 @@ class GraphNodeItem(QGraphicsRectItem):
         self.setBrush(QBrush(self._color))
         border_color = p.get("border", "#3e3e42")
         self.setPen(QPen(QColor(border_color), 2))
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        # 只读模式下禁用移动
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, not readonly)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setZValue(1)
@@ -189,7 +192,10 @@ class GraphNodeItem(QGraphicsRectItem):
         }
 
     def contextMenuEvent(self, event) -> None:
-        """右键菜单"""
+        """右键菜单（只读模式下禁用）"""
+        if self._readonly:
+            return
+
         menu = QMenu()
         menu.addAction("编辑属性", self._edit_properties)
         menu.addAction("删除节点", self._delete)
@@ -297,8 +303,9 @@ class GraphScene(QGraphicsScene):
 
     node_selected = pyqtSignal(str)  # 节点 ID
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, readonly: bool = False):
         super().__init__(parent)
+        self._readonly = readonly
         self._nodes: dict[str, GraphNodeItem] = {}
         self._edges: list[GraphEdgeItem] = []
         # 从主题管理器获取背景色
@@ -307,7 +314,7 @@ class GraphScene(QGraphicsScene):
 
     def add_node(self, node_id: str, node_type: str, label: str, position: dict | None = None) -> GraphNodeItem:
         """添加节点"""
-        node = GraphNodeItem(node_id, node_type, label, position)
+        node = GraphNodeItem(node_id, node_type, label, position, readonly=self._readonly)
         self.addItem(node)
         self._nodes[node_id] = node
         return node
@@ -390,15 +397,16 @@ class GraphScene(QGraphicsScene):
 class GraphEditorView(QGraphicsView):
     """图编辑器视图 — 支持缩放和平移、拖拽连线"""
 
-    def __init__(self, scene: GraphScene, parent=None):
+    def __init__(self, scene: GraphScene, parent=None, readonly: bool = False):
         super().__init__(scene, parent)
+        self._readonly = readonly
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self._zoom = 1.0
 
-        # 拖拽连线状态
+        # 拖拽连线状态（只读模式下禁用）
         self._dragging_edge = False
         self._drag_source_port = None  # (node_id, "output"|"input")
         self._temp_line = None
@@ -411,7 +419,11 @@ class GraphEditorView(QGraphicsView):
         self.setTransform(self.transform().scale(factor, factor))
 
     def mousePressEvent(self, event):
-        """检测是否点击了连接点"""
+        """检测是否点击了连接点（只读模式下禁用）"""
+        if self._readonly:
+            super().mousePressEvent(event)
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             item = self.itemAt(event.pos())
             if isinstance(item, QGraphicsRectItem) and item.parentItem():
@@ -430,7 +442,11 @@ class GraphEditorView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        """拖拽时绘制临时连线"""
+        """拖拽时绘制临时连线（只读模式下禁用）"""
+        if self._readonly:
+            super().mouseMoveEvent(event)
+            return
+
         if self._dragging_edge and self._drag_source_port:
             scene_pos = self.mapToScene(event.pos())
 
@@ -461,7 +477,11 @@ class GraphEditorView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        """释放时连接到目标节点"""
+        """释放时连接到目标节点（只读模式下禁用）"""
+        if self._readonly:
+            super().mouseReleaseEvent(event)
+            return
+
         if self._dragging_edge and self._drag_source_port:
             # 清除临时线
             if self._temp_line:
@@ -540,18 +560,26 @@ class NodePropertyDialog(QDialog):
 
 
 class GraphEditorWidget(QWidget):
-    """图编辑器组件 — 场景 + 视图 + 工具栏"""
+    """图编辑器组件 — 场景 + 视图 + 工具栏
 
-    def __init__(self, parent=None):
+    支持两种模式:
+    - 编辑模式 (readonly=False): 完整编辑功能
+    - 只读模式 (readonly=True): 仅查看，无编辑功能
+    """
+
+    def __init__(self, parent=None, readonly: bool = False):
         super().__init__(parent)
+        self._readonly = readonly
         self._node_counter = 0  # 实例变量，用于自动生成节点 ID
         self._setup_ui()
 
     def _setup_ui(self) -> None:
+        from PyQt6.QtWidgets import QLabel
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # 工具栏
+        # 工具栏（只读模式下简化）
         toolbar = QHBoxLayout()
         from presentation.widgets.styled_button import StyledButton
 
@@ -559,26 +587,34 @@ class GraphEditorWidget(QWidget):
         self._btn_fit.clicked.connect(self.fit_to_view)
         toolbar.addWidget(self._btn_fit)
 
-        self._btn_add_node = StyledButton("+ 添加节点", style_type="ghost")
-        self._btn_add_node.clicked.connect(self._add_node_dialog)
-        toolbar.addWidget(self._btn_add_node)
+        if not self._readonly:
+            # 编辑模式：显示完整工具栏
+            self._btn_add_node = StyledButton("+ 添加节点", style_type="ghost")
+            self._btn_add_node.clicked.connect(self._add_node_dialog)
+            toolbar.addWidget(self._btn_add_node)
 
-        self._btn_clear = StyledButton("清空", style_type="ghost")
-        self._btn_clear.clicked.connect(self.clear)
-        toolbar.addWidget(self._btn_clear)
+            self._btn_clear = StyledButton("清空", style_type="ghost")
+            self._btn_clear.clicked.connect(self.clear)
+            toolbar.addWidget(self._btn_clear)
 
-        toolbar.addStretch()
+            toolbar.addStretch()
 
-        # 保存按钮
-        self._btn_save = StyledButton("💾 保存", style_type="primary")
-        self._btn_save.clicked.connect(self._save_graph)
-        toolbar.addWidget(self._btn_save)
+            # 保存按钮
+            self._btn_save = StyledButton("💾 保存", style_type="primary")
+            self._btn_save.clicked.connect(self._save_graph)
+            toolbar.addWidget(self._btn_save)
+        else:
+            # 只读模式：显示提示
+            toolbar.addStretch()
+            readonly_label = QLabel("📖 只读模式")
+            readonly_label.setStyleSheet("color: #858585; padding: 4px 8px;")
+            toolbar.addWidget(readonly_label)
 
         layout.addLayout(toolbar)
 
         # 场景和视图
-        self._scene = GraphScene()
-        self._view = GraphEditorView(self._scene)
+        self._scene = GraphScene(readonly=self._readonly)
+        self._view = GraphEditorView(self._scene, readonly=self._readonly)
         layout.addWidget(self._view)
 
         # 运行时高亮订阅

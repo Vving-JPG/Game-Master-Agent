@@ -12,6 +12,10 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from foundation.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class LLMProviderConfig(BaseSettings):
     """单个 LLM 供应商配置"""
@@ -152,6 +156,50 @@ class Settings(BaseSettings):
         if self.anthropic_api_key:
             providers.append("anthropic")
         return providers or [self.default_provider]
+
+    def load_from_project_config(self, config_path: Path | str) -> None:
+        """从项目 config.json 加载配置并覆盖当前配置
+
+        Args:
+            config_path: 项目 config.json 文件路径
+        """
+        import json
+        config_file = Path(config_path)
+        if not config_file.exists():
+            return
+
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            # 映射 config.json 到 Settings 字段
+            # config.json 格式: {"deepseek": {"api_key": "...", ...}}
+            for provider, provider_config in config.items():
+                if provider == "deepseek":
+                    if "api_key" in provider_config:
+                        self.deepseek_api_key = provider_config["api_key"]
+                    if "base_url" in provider_config:
+                        self.deepseek_base_url = provider_config["base_url"]
+                    if "model" in provider_config:
+                        self.deepseek_model = provider_config["model"]
+                elif provider == "openai":
+                    if "api_key" in provider_config:
+                        self.openai_api_key = provider_config["api_key"]
+                    if "base_url" in provider_config:
+                        self.openai_base_url = provider_config["base_url"]
+                    if "model" in provider_config:
+                        self.openai_model = provider_config["model"]
+                elif provider == "anthropic":
+                    if "api_key" in provider_config:
+                        self.anthropic_api_key = provider_config["api_key"]
+                    if "base_url" in provider_config:
+                        self.anthropic_base_url = provider_config["base_url"]
+                    if "model" in provider_config:
+                        self.anthropic_model = provider_config["model"]
+
+            logger.info(f"已从项目配置加载: {config_file}")
+        except Exception as e:
+            logger.warning(f"加载项目配置失败: {e}")
 
 
 # 全局单例

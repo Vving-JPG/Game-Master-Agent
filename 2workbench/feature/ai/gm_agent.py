@@ -51,6 +51,7 @@ class GMAgent:
         db_path: str | None = None,
         system_prompt: str | None = None,
         skills_dir: str | None = None,
+        auto_load_project_graph: bool = True,
     ):
         self._world_id = world_id
         self._db_path = db_path
@@ -73,8 +74,29 @@ class GMAgent:
         self._graph = _default_gm_graph
         self._graph_source = "default"  # default / json
 
+        # 自动加载项目图
+        if auto_load_project_graph:
+            self._load_project_graph()
+
         # 加载游戏状态
         self._initial_state = self._load_initial_state()
+
+    def _load_project_graph(self) -> None:
+        """从当前打开的项目加载 graph.json 并编译"""
+        try:
+            from feature.project import project_manager
+            if project_manager.is_open and project_manager.project_path:
+                graph_data = project_manager.load_graph()
+                if graph_data and graph_data.get("nodes"):
+                    from feature.ai.graph_compiler import graph_compiler
+                    compiled = graph_compiler.compile(graph_data)
+                    self._graph = compiled
+                    self._graph_source = "json"
+                    logger.info(f"Agent 图已从项目加载: {project_manager.current_project.name}")
+        except Exception as e:
+            logger.warning(f"加载项目图失败，使用默认图: {e}")
+            self._graph = _default_gm_graph
+            self._graph_source = "default"
 
     def set_graph(self, compiled_graph: Any, source: str = "json") -> None:
         """设置 Agent 使用的图实例

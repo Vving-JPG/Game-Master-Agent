@@ -92,6 +92,8 @@ class LogViewer(BaseWidget):
 
     def _toggle_filter(self, level: str, state) -> None:
         self._filters[level] = bool(state)
+        # 切换筛选后刷新日志显示
+        self._refresh_with_filters()
 
     def _search_in_log(self) -> None:
         """在日志中搜索关键词"""
@@ -128,20 +130,52 @@ class LogViewer(BaseWidget):
             return
         try:
             content = self._log_path.read_text(encoding="utf-8")
-            self._output.setPlainText(content)
+            # 应用级别筛选
+            filtered_content = self._apply_filters(content)
+            self._output.setPlainText(filtered_content)
             # 添加文件监控
             if str(self._log_path) not in self._watcher.files():
                 self._watcher.addPath(str(self._log_path))
         except Exception as e:
             logger.error(f"日志加载失败: {e}")
 
+    def _apply_filters(self, content: str) -> str:
+        """根据级别筛选日志内容
+
+        Args:
+            content: 原始日志内容
+
+        Returns:
+            筛选后的日志内容
+        """
+        lines = content.split('\n')
+        filtered_lines = []
+
+        for line in lines:
+            # 检查行中包含的日志级别
+            for level, enabled in self._filters.items():
+                if enabled and f"│ {level}" in line:
+                    filtered_lines.append(line)
+                    break
+
+        return '\n'.join(filtered_lines)
+
+    def _refresh_with_filters(self) -> None:
+        """使用当前筛选器重新加载日志"""
+        if self._log_path and self._log_path.exists():
+            try:
+                content = self._log_path.read_text(encoding="utf-8")
+                filtered_content = self._apply_filters(content)
+                self._output.setPlainText(filtered_content)
+            except Exception as e:
+                logger.error(f"刷新日志失败: {e}")
+
     def _on_file_changed(self, path: str) -> None:
         """文件变化时自动刷新"""
         if self._auto_scroll and self._log_path and str(self._log_path) == path:
             try:
                 if self._log_path.exists():
-                    content = self._log_path.read_text(encoding="utf-8")
-                    self._output.setPlainText(content)
+                    self._refresh_with_filters()
                     scrollbar = self._output.verticalScrollBar()
                     scrollbar.setValue(scrollbar.maximum())
                     # 重新添加监控（某些编辑器会创建新文件）
@@ -176,3 +210,47 @@ class LogViewer(BaseWidget):
         if self._auto_scroll:
             scrollbar = self._output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
+
+    def load_project_log(self, project_path: Path | str) -> None:
+        """自动加载项目日志文件
+
+        Args:
+            project_path: 项目根目录路径
+        """
+        import os
+        from datetime import datetime
+
+        project_path = Path(project_path)
+
+        # 尝试多个可能的日志路径（项目级）
+        possible_paths = [
+            project_path / "logs" / f"{datetime.now().strftime('%Y-%m-%d')}.log",
+            project_path / "logs" / "app.log",
+            project_path / "app.log",
+        ]
+
+        # 查找最新的日志文件
+        log_dir = project_path / "logs"
+        if log_dir.exists():
+            log_files = sorted(log_dir.glob("*.log"), key=lambda x: x.stat().st_mtime, reverse=True)
+            if log_files:
+                possible_paths.insert(0, log_files[0])
+
+        # 尝试应用级日志（2workbench/data/logs/）
+        app_log_paths = [
+            Path("data/logs/app.log"),
+            Path("./data/logs/app.log"),
+            Path(__file__).parent.parent.parent / "data/logs/app.log",
+        ]
+        possible_paths.extend(app_log_paths)
+
+        for log_path in possible_paths:
+            if log_path.exists():
+                self._log_path = log_path
+                self._load_log()
+                logger.info(f"已加载日志: {log_path}")
+                return
+
+        # 如果没有找到日志文件，显示提示信息
+        self._output.setPlainText("未找到日志文件。\n\n可能的位置:\n- 项目/logs/*.log\n- data/logs/app.log")
+        logger.warning(f"未找到日志文件，已尝试: {[str(p) for p in possible_paths]}")

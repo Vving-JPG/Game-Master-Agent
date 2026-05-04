@@ -200,11 +200,10 @@ class ProjectManager:
         if project_dir.exists():
             raise FileExistsError(f"项目已存在: {project_dir}")
 
-        # 创建目录结构
+        # 创建目录结构（管理器改造后简化）
         project_dir.mkdir(parents=True)
         (project_dir / "prompts").mkdir()
-        (project_dir / "tools").mkdir()
-        (project_dir / "knowledge").mkdir()
+        (project_dir / "skills").mkdir()
         (project_dir / "saves").mkdir()
         (project_dir / "logs").mkdir()
 

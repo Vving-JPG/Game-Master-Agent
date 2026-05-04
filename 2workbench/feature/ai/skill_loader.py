@@ -55,6 +55,8 @@ class SkillLoader:
     def discover_all(self) -> list[str]:
         """扫描目录，发现所有 Skill
 
+        目录结构: skills/skill_name/SKILL.md
+
         Returns:
             发现的 Skill 名称列表
         """

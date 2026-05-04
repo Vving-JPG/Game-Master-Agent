@@ -3,8 +3,7 @@
 布局:
 ┌─────────────────────────────────────────────────────┐
 │ 菜单栏 (File/Edit/View/Agent/Tools/Help)            │
-├─────────────────────────────────────────────────────┤
-│ 工具栏 (新建/打开/保存/运行/调试/主题切换)           │
+├─────────────────────────────────────────────────────         │
 ├──────────┬──────────────────────────┬───────────────┤
 │ 左侧面板  │     中央编辑区           │  右侧面板     │
 │ (资源树)  │  (图编辑器/代码/控制台)  │ (属性/状态)   │
@@ -200,6 +199,8 @@ class CenterPanel(BaseWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
+        from PyQt6.QtWidgets import QLabel
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -223,9 +224,13 @@ class CenterPanel(BaseWidget):
         self.tab_widget.addTab(self._welcome_widget, "Welcome")
 
         # 编辑器标签页（默认隐藏，打开项目后显示）
-        self._graph_editor = None
-        self._prompt_editor = None
-        self._tool_manager = None
+        # 管理器改造后的标签页
+        self._graph_viewer = None      # 图查看器（只读）
+        self._prompt_manager = None    # 提示词管理器
+        self._skill_manager = None     # Skill 管理器
+        self._runtime_panel = None     # 运行控制台
+        self._event_monitor = None     # 事件监视
+        self._log_viewer = None        # 日志查看
 
     def remove_welcome_tab(self) -> None:
         """移除欢迎标签页"""
@@ -269,12 +274,18 @@ class CenterPanel(BaseWidget):
         self.tab_widget.removeTab(index)
         
         # 如果是编辑器标签页，清理引用
-        if widget == self._graph_editor:
-            self._graph_editor = None
-        elif widget == self._prompt_editor:
-            self._prompt_editor = None
-        elif widget == self._tool_manager:
-            self._tool_manager = None
+        if widget == self._graph_viewer:
+            self._graph_viewer = None
+        elif widget == self._prompt_manager:
+            self._prompt_manager = None
+        elif widget == self._skill_manager:
+            self._skill_manager = None
+        elif widget == self._runtime_panel:
+            self._runtime_panel = None
+        elif widget == self._event_monitor:
+            self._event_monitor = None
+        elif widget == self._log_viewer:
+            self._log_viewer = None
 
     def add_tab(self, widget: QWidget, title: str) -> int:
         """添加标签页"""
@@ -284,206 +295,64 @@ class CenterPanel(BaseWidget):
         """获取当前标签页"""
         return self.tab_widget.currentWidget()
 
-    def show_graph_editor(self, graph_data: dict | None = None) -> None:
-        """显示图编辑器标签页"""
+    def show_graph_viewer(self, graph_data: dict | None = None) -> None:
+        """显示图查看器标签页（只读）"""
         from presentation.editor.graph_editor import GraphEditorWidget
-        if self._graph_editor is None:
-            self._graph_editor = GraphEditorWidget()
-            self.tab_widget.addTab(self._graph_editor, "📊 图编辑器")
+        if self._graph_viewer is None:
+            self._graph_viewer = GraphEditorWidget(readonly=True)
+            self.tab_widget.addTab(self._graph_viewer, "📊 图查看")
         if graph_data:
-            self._graph_editor.load_graph(graph_data)
-        idx = self.tab_widget.indexOf(self._graph_editor)
+            self._graph_viewer.load_graph(graph_data)
+        idx = self.tab_widget.indexOf(self._graph_viewer)
         self.tab_widget.setCurrentIndex(idx)
 
-    def show_prompt_editor(self, prompts: dict[str, str] | None = None) -> None:
-        """显示 Prompt 管理器标签页"""
+    def show_prompt_manager(self, prompts: dict[str, str] | None = None) -> None:
+        """显示提示词管理器标签页"""
         from presentation.editor.prompt_editor import PromptEditorWidget
-        if self._prompt_editor is None:
-            self._prompt_editor = PromptEditorWidget()
-            self.tab_widget.addTab(self._prompt_editor, "📝 Prompt")
+        if self._prompt_manager is None:
+            self._prompt_manager = PromptEditorWidget()
+            self.tab_widget.addTab(self._prompt_manager, "📝 提示词")
         if prompts:
-            self._prompt_editor.load_prompts(prompts)
-        idx = self.tab_widget.indexOf(self._prompt_editor)
+            self._prompt_manager.load_prompts(prompts)
+        idx = self.tab_widget.indexOf(self._prompt_manager)
         self.tab_widget.setCurrentIndex(idx)
 
-    def show_tool_manager(self, right_panel=None) -> None:
-        """显示工具管理器标签页"""
-        from presentation.editor.tool_manager import ToolManagerWidget
-        if self._tool_manager is None:
-            self._tool_manager = ToolManagerWidget()
-            self.tab_widget.addTab(self._tool_manager, "🔧 工具")
-            # 连接工具选中信号到右侧面板
-            if right_panel:
-                self._tool_manager.tool_selected.connect(right_panel.show_tool_properties)
-        idx = self.tab_widget.indexOf(self._tool_manager)
+    def show_skill_manager(self) -> None:
+        """显示 Skill 管理器标签页"""
+        from presentation.editor.skill_manager import SkillManagerWidget
+        if self._skill_manager is None:
+            self._skill_manager = SkillManagerWidget()
+            self._skill_manager.load_skills()
+            self.tab_widget.addTab(self._skill_manager, "🎯 Skill")
+        idx = self.tab_widget.indexOf(self._skill_manager)
         self.tab_widget.setCurrentIndex(idx)
 
+    def show_runtime_panel(self) -> None:
+        """显示运行控制台"""
+        from presentation.ops.debugger import RuntimePanel
+        if self._runtime_panel is None:
+            self._runtime_panel = RuntimePanel()
+            self.tab_widget.addTab(self._runtime_panel, "▶️ 运行")
+        idx = self.tab_widget.indexOf(self._runtime_panel)
+        self.tab_widget.setCurrentIndex(idx)
 
-class RightPanel(BaseWidget):
-    """右侧面板 — 属性编辑器 + 状态监控"""
+    def show_event_monitor(self) -> None:
+        """显示事件监视"""
+        from presentation.ops.debugger import EventMonitor
+        if self._event_monitor is None:
+            self._event_monitor = EventMonitor()
+            self.tab_widget.addTab(self._event_monitor, "📡 事件")
+        idx = self.tab_widget.indexOf(self._event_monitor)
+        self.tab_widget.setCurrentIndex(idx)
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        from PyQt6.QtWidgets import QFormLayout, QLineEdit, QTextEdit, QComboBox, QCheckBox, QGroupBox, QScrollArea, QWidget
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.tab_widget = QTabWidget()
-        layout.addWidget(self.tab_widget)
-
-        # 属性面板
-        self.props_scroll = QScrollArea()
-        self.props_scroll.setWidgetResizable(True)
-        self.props_container = QWidget()
-        self.props_layout = QFormLayout(self.props_container)
-        self.props_layout.setSpacing(8)
-        self.props_layout.setContentsMargins(12, 12, 12, 12)
-        
-        # 添加默认提示
-        self.props_hint = QLabel("选择一个节点或工具查看属性")
-        self.props_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        text_secondary = theme_manager.get_color("text_secondary")
-        self.props_hint.setStyleSheet(f"color: {text_secondary}; font-size: 13px; padding: 20px;")
-        self.props_layout.addRow(self.props_hint)
-        
-        self.props_scroll.setWidget(self.props_container)
-        self.tab_widget.addTab(self.props_scroll, "属性")
-
-        # Agent 状态面板
-        self.status_widget = QWidget()
-        self.status_layout = QVBoxLayout(self.status_widget)
-        self.status_layout.setSpacing(10)
-        self.status_layout.setContentsMargins(12, 12, 12, 12)
-        
-        # Agent 状态组
-        self.agent_status_group = QGroupBox("Agent 状态")
-        self.agent_status_layout = QFormLayout(self.agent_status_group)
-        self.agent_status_label = QLabel("未加载")
-        self.agent_status_layout.addRow("状态:", self.agent_status_label)
-        self.status_layout.addWidget(self.agent_status_group)
-        
-        # 回合信息组
-        self.turn_info_group = QGroupBox("回合信息")
-        self.turn_info_layout = QFormLayout(self.turn_info_group)
-        self.turn_num_label = QLabel("0")
-        self.turn_event_label = QLabel("-")
-        self.turn_info_layout.addRow("回合数:", self.turn_num_label)
-        self.turn_info_layout.addRow("当前事件:", self.turn_event_label)
-        self.status_layout.addWidget(self.turn_info_group)
-        
-        # Feature 状态组
-        self.feature_status_group = QGroupBox("Feature 状态")
-        self.feature_status_layout = QVBoxLayout(self.feature_status_group)
-        self.feature_list = QLabel("未启用任何 Feature")
-        self.feature_status_layout.addWidget(self.feature_list)
-        self.status_layout.addWidget(self.feature_status_group)
-        
-        self.status_layout.addStretch()
-        self.tab_widget.addTab(self.status_widget, "状态")
-    
-    def show_node_properties(self, node_data: dict):
-        """显示节点属性"""
-        # 清除现有内容
-        while self.props_layout.count():
-            item = self.props_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        from PyQt6.QtWidgets import QLineEdit, QTextEdit, QLabel
-        
-        # 节点名称
-        name_label = QLabel("节点名称:")
-        name_value = QLabel(node_data.get("name", "未知"))
-        success_color = theme_manager.get_color("success")
-        name_value.setStyleSheet(f"font-weight: bold; color: {success_color};")
-        self.props_layout.addRow(name_label, name_value)
-        
-        # 节点类型
-        type_label = QLabel("类型:")
-        type_value = QLabel(node_data.get("type", "未知"))
-        self.props_layout.addRow(type_label, type_value)
-        
-        # 描述
-        if "description" in node_data:
-            desc_label = QLabel("描述:")
-            desc_value = QLabel(node_data["description"])
-            desc_value.setWordWrap(True)
-            text_primary = theme_manager.get_color("text_primary")
-            desc_value.setStyleSheet(f"color: {text_primary};")
-            self.props_layout.addRow(desc_label, desc_value)
-        
-        # 配置参数
-        if "config" in node_data:
-            config_label = QLabel("配置:")
-            config_value = QTextEdit(json.dumps(node_data["config"], ensure_ascii=False, indent=2))
-            config_value.setReadOnly(True)
-            config_value.setMaximumHeight(100)
-            self.props_layout.addRow(config_label, config_value)
-    
-    def show_tool_properties(self, tool_data: dict):
-        """显示工具属性"""
-        # 清除现有内容
-        while self.props_layout.count():
-            item = self.props_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        from PyQt6.QtWidgets import QLineEdit, QTextEdit, QLabel, QCheckBox
-        
-        # 工具名称
-        name_label = QLabel("工具名称:")
-        name_value = QLabel(tool_data.get("name", "未知"))
-        warning_color = theme_manager.get_color("warning")
-        name_value.setStyleSheet(f"font-weight: bold; color: {warning_color};")
-        self.props_layout.addRow(name_label, name_value)
-        
-        # 描述
-        if "description" in tool_data:
-            desc_label = QLabel("描述:")
-            desc_value = QLabel(tool_data["description"])
-            desc_value.setWordWrap(True)
-            text_primary = theme_manager.get_color("text_primary")
-            desc_value.setStyleSheet(f"color: {text_primary};")
-            self.props_layout.addRow(desc_label, desc_value)
-        
-        # 参数 Schema
-        if "parameters" in tool_data:
-            params_label = QLabel("参数 Schema:")
-            params_value = QTextEdit(json.dumps(tool_data["parameters"], ensure_ascii=False, indent=2))
-            params_value.setReadOnly(True)
-            params_value.setMaximumHeight(150)
-            self.props_layout.addRow(params_label, params_value)
-        
-        # 启用状态
-        enabled = tool_data.get("enabled", True)
-        enabled_checkbox = QCheckBox("启用")
-        enabled_checkbox.setChecked(enabled)
-        enabled_checkbox.setEnabled(False)  # 只读显示
-        self.props_layout.addRow("状态:", enabled_checkbox)
-    
-    def update_agent_status(self, status: str, turn: int = 0, event: str = ""):
-        """更新 Agent 状态显示"""
-        self.agent_status_label.setText(status)
-        if status == "运行中":
-            color = theme_manager.get_color("success")
-        else:
-            color = theme_manager.get_color("text_secondary")
-        self.agent_status_label.setStyleSheet(f"color: {color};")
-        self.turn_num_label.setText(str(turn))
-        self.turn_event_label.setText(event if event else "-")
-    
-    def update_feature_status(self, features: list):
-        """更新 Feature 状态显示"""
-        if features:
-            feature_text = "\n".join([f"✅ {f}" for f in features])
-            self.feature_list.setText(feature_text)
-        else:
-            self.feature_list.setText("未启用任何 Feature")
+    def show_log_viewer(self) -> None:
+        """显示日志查看"""
+        from presentation.ops.log_viewer import LogViewer
+        if self._log_viewer is None:
+            self._log_viewer = LogViewer()
+            self.tab_widget.addTab(self._log_viewer, "📋 日志")
+        idx = self.tab_widget.indexOf(self._log_viewer)
+        self.tab_widget.setCurrentIndex(idx)
 
 
 class MainWindow(QMainWindow):
@@ -521,31 +390,44 @@ class MainWindow(QMainWindow):
     def _load_project_to_editors(self, project_path: Path) -> None:
         """将当前项目加载到所有编辑器（统一入口）"""
         from presentation.project.manager import project_manager
-        
+        from foundation.config import settings
+
+        # 从项目 config.json 加载配置
+        config_path = project_path / "config.json"
+        if config_path.exists():
+            settings.load_from_project_config(config_path)
+
         # 关闭欢迎标签页
         self.center_panel.remove_welcome_tab()
 
-        # 加载图编辑器
+        # 加载图查看器（只读）
         graph = project_manager.load_graph()
-        self.center_panel.show_graph_editor(graph)
+        self.center_panel.show_graph_viewer(graph)
 
-        # 加载 Prompt 编辑器
+        # 加载提示词管理器
         prompts = {}
         for name in project_manager.list_prompts():
             prompts[name] = project_manager.load_prompt(name)
-        self.center_panel.show_prompt_editor(prompts)
+        self.center_panel.show_prompt_manager(prompts)
 
-        # 加载工具管理器
-        self.center_panel.show_tool_manager(self.right_panel)
+        # 加载 Skill 管理器
+        self.center_panel.show_skill_manager()
+
+        # 加载运行控制台
+        self.center_panel.show_runtime_panel()
+
+        # 加载事件监视
+        self.center_panel.show_event_monitor()
+
+        # 加载日志查看
+        self.center_panel.show_log_viewer()
+        # 自动加载项目日志
+        if self.center_panel._log_viewer:
+            self.center_panel._log_viewer.load_project_log(project_path)
 
         # 加载左侧资源树
         self.left_panel.setVisible(True)
         self.left_panel.load_project_tree(str(project_path))
-
-        # 更新 Feature 状态
-        from feature.registry import feature_registry
-        features = feature_registry.list_features()
-        self.right_panel.update_feature_status(features)
 
         logger.info("主窗口初始化完成")
 
@@ -560,7 +442,9 @@ class MainWindow(QMainWindow):
                 self._show_message(f"项目已加载: {project_manager._current_project.name}", 3000)
                 logger.info(f"项目加载完成: {project_manager._current_project.name}")
             except Exception as e:
+                import traceback
                 logger.error(f"加载项目失败: {e}")
+                logger.error(traceback.format_exc())
                 self._show_message(f"加载项目失败: {e}", 3000)
     
     def _do_create_project(self, name: str, template: str, directory: str, project_root: str):
@@ -642,15 +526,10 @@ class MainWindow(QMainWindow):
         self.center_panel = CenterPanel()
         self._splitter.addWidget(self.center_panel)
 
-        # 右侧面板
-        self.right_panel = RightPanel()
-        self._splitter.addWidget(self.right_panel)
-
-        # 设置宽度比例
-        self._splitter.setSizes([240, 900, 300])
+        # 设置宽度比例 (左:中 = 240:1140)
+        self._splitter.setSizes([240, 1140])
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
-        self._splitter.setStretchFactor(2, 0)
 
         layout.addWidget(self._splitter)
 
@@ -739,18 +618,7 @@ class MainWindow(QMainWindow):
         # View 菜单
         view_menu = menubar.addMenu("视图(&V)")
 
-        toggle_left = QAction("左侧面板", self, checkable=True, checked=True)
-        toggle_left.setShortcut("Ctrl+B")
-        toggle_left.triggered.connect(self._toggle_sidebar)
-        view_menu.addAction(toggle_left)
 
-        toggle_right = QAction("右侧面板", self, checkable=True, checked=True)
-        toggle_right.triggered.connect(
-            lambda checked: self.right_panel.setVisible(checked)
-        )
-        view_menu.addAction(toggle_right)
-
-        view_menu.addSeparator()
 
         # 标签页快捷键
         next_tab_action = QAction("下一个标签页", self)
@@ -798,16 +666,11 @@ class MainWindow(QMainWindow):
         stop_action.triggered.connect(self._on_stop_agent)
         agent_menu.addAction(stop_action)
 
-        # Tools 菜单
+        # Tools 菜单（管理器改造后简化）
         tools_menu = menubar.addMenu("工具(&T)")
 
         tools_menu.addAction("🔧 运行时调试器", lambda: self._show_ops_panel("debugger"))
-        tools_menu.addAction("📊 评估工作台", lambda: self._show_ops_panel("evaluator"))
-        tools_menu.addAction("📖 知识库编辑器", lambda: self._show_ops_panel("knowledge"))
-        tools_menu.addAction("🔒 安全护栏", lambda: self._show_ops_panel("safety"))
-        tools_menu.addAction("🤖 多 Agent 编排", lambda: self._show_ops_panel("multi_agent"))
         tools_menu.addAction("📋 日志追踪", lambda: self._show_ops_panel("logger"))
-        tools_menu.addAction("🚀 部署管理", lambda: self._show_ops_panel("deploy"))
 
         # 设置菜单
         settings_menu = menubar.addMenu("设置(&S)")
@@ -838,51 +701,12 @@ class MainWindow(QMainWindow):
 
     def _setup_toolbar(self) -> None:
         """设置工具栏"""
-        from PyQt6.QtWidgets import QWidget, QHBoxLayout
-        
+        from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel
+
         toolbar = self.addToolBar("主工具栏")
         toolbar.setMovable(False)
 
-        # 使用系统标准图标替代 Emoji
-        from PyQt6.QtWidgets import QStyle
-
-        self._run_action = QAction("运行", self)
-        self._run_action.triggered.connect(self._on_run_agent)
-        toolbar.addAction(self._run_action)
-
-        self._stop_action = QAction("停止", self)
-        self._stop_action.triggered.connect(self._on_stop_agent)
-        self._stop_action.setEnabled(False)
-        toolbar.addAction(self._stop_action)
-
-        toolbar.addSeparator()
-
-        dark_action = QAction("暗", self)
-        dark_action.triggered.connect(lambda: theme_manager.apply("dark"))
-        toolbar.addAction(dark_action)
-
-        light_action = QAction("亮", self)
-        light_action.triggered.connect(lambda: theme_manager.apply("light"))
-        toolbar.addAction(light_action)
-        
-        # 添加弹性空间，将状态信息推到右侧
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        toolbar.addWidget(spacer)
-        
-        # 状态信息显示在工具栏右侧
-        text_secondary = theme_manager.get_color("text_secondary")
-        self._toolbar_status_agent = QLabel("🤖 未加载")
-        self._toolbar_status_agent.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
-        toolbar.addWidget(self._toolbar_status_agent)
-
-        self._toolbar_status_model = QLabel("🧠 --")
-        self._toolbar_status_model.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
-        toolbar.addWidget(self._toolbar_status_model)
-
-        self._toolbar_status_theme = QLabel("🎨 Dark")
-        self._toolbar_status_theme.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
-        toolbar.addWidget(self._toolbar_status_theme)
+        # 工具栏已清空
 
     def _setup_statusbar(self) -> None:
         """设置状态栏 — 最小化，只保留消息提示"""
@@ -892,10 +716,9 @@ class MainWindow(QMainWindow):
         statusbar.hide()
 
     def _show_message(self, msg: str, duration: int = 3000) -> None:
-        """统一消息显示 — 使用工具栏状态标签"""
-        self._toolbar_status_agent.setText(f"💬 {msg}")
-        if duration > 0:
-            QTimer.singleShot(duration, lambda: self._toolbar_status_agent.setText("🤖 未加载"))
+        """统一消息显示 — 使用状态栏"""
+        statusbar = self.statusBar()
+        statusbar.showMessage(msg, duration)
 
     def _setup_eventbus(self) -> None:
         """设置 EventBus 订阅"""
@@ -913,21 +736,15 @@ class MainWindow(QMainWindow):
 
     def _on_turn_start(self, event: Event) -> None:
         turn = event.get("turn", 0)
-        self._toolbar_status_agent.setText(f"🤖 运行中 (Turn {turn})")
-        success_color = theme_manager.get_color("success")
-        self._toolbar_status_agent.setStyleSheet(f"color: {success_color}; padding: 0 10px;")
+        self._show_message(f"Agent 运行中 (Turn {turn})")
 
     def _on_turn_end(self, event: Event) -> None:
-        self._toolbar_status_agent.setText("🤖 空闲")
-        text_secondary = theme_manager.get_color("text_secondary")
-        self._toolbar_status_agent.setStyleSheet(f"color: {text_secondary}; padding: 0 10px;")
+        self._show_message("Agent 空闲")
 
     def _on_agent_error_event(self, event: Event) -> None:
         """EventBus 的 agent_error 事件处理"""
         error = event.get("error", "未知错误")
-        self._toolbar_status_agent.setText(f"🤖 错误")
-        error_color = theme_manager.get_color("error")
-        self._toolbar_status_agent.setStyleSheet(f"color: {error_color}; padding: 0 10px;")
+        self._show_message(f"Agent 错误: {error}")
 
     def _on_stream_token(self, event: Event) -> None:
         token = event.get("token", "")
@@ -943,8 +760,6 @@ class MainWindow(QMainWindow):
 
         if not agent:
             logger.error("Agent 准备完成但未获取到实例")
-            self._run_action.setEnabled(True)
-            self._stop_action.setEnabled(False)
             return
 
         # 在后台线程中运行 Agent
@@ -958,10 +773,6 @@ class MainWindow(QMainWindow):
         """Agent 运行准备失败"""
         error = event.data.get("error", "未知错误")
         logger.error(f"Agent 运行准备失败: {error}")
-
-        # 恢复按钮状态
-        self._run_action.setEnabled(True)
-        self._stop_action.setEnabled(False)
 
         QMessageBox.critical(self, "Agent 错误", f"运行准备失败: {error}")
 
@@ -1049,9 +860,12 @@ class MainWindow(QMainWindow):
         """查找"""
         # 聚焦到当前编辑器的搜索功能
         current = self.center_panel.tab_widget.currentWidget()
-        if hasattr(current, '_search'):
-            current._search.setFocus()
-            current._search.selectAll()
+        if current and hasattr(current, '_search') and current._search is not None:
+            try:
+                current._search.setFocus()
+                current._search.selectAll()
+            except Exception as e:
+                logger.warning(f"查找功能失败: {e}")
 
     # --- 菜单动作 ---
 
@@ -1150,12 +964,12 @@ class MainWindow(QMainWindow):
             ext = path.suffix.lower()
             
             if ext == '.json':
-                # JSON 文件 — 在图编辑器中打开
+                # JSON 文件 — 在图查看器中打开
                 import json
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 if 'nodes' in data:
-                    self.center_panel.show_graph_editor(data)
+                    self.center_panel.show_graph_viewer(data)
                 else:
                     self._open_text_editor(file_path)
                     
@@ -1345,8 +1159,6 @@ class MainWindow(QMainWindow):
             return
 
         # 禁用运行按钮，启用停止按钮
-        self._run_action.setEnabled(False)
-        self._stop_action.setEnabled(True)
         self._show_message("Agent 运行中...")
 
         # 保存用户输入供后续使用
@@ -1364,10 +1176,6 @@ class MainWindow(QMainWindow):
 
     def _on_agent_finished(self, result: dict) -> None:
         """Agent 运行完成回调"""
-        # 恢复按钮状态
-        self._run_action.setEnabled(True)
-        self._stop_action.setEnabled(False)
-
         status = result.get("status", "unknown")
         if status == "success":
             narrative = result.get("narrative", "")
@@ -1387,10 +1195,6 @@ class MainWindow(QMainWindow):
 
     def _on_agent_error(self, error: str) -> None:
         """Agent 运行错误回调"""
-        # 恢复按钮状态
-        self._run_action.setEnabled(True)
-        self._stop_action.setEnabled(False)
-
         self._show_message(f"Agent 运行错误: {error}", 5000)
         QMessageBox.critical(self, "Agent 错误", f"运行失败: {error}")
 
@@ -1410,29 +1214,16 @@ class MainWindow(QMainWindow):
 
     def _on_agent_stopped(self) -> None:
         """Agent 被停止回调"""
-        # 恢复按钮状态
-        self._run_action.setEnabled(True)
-        self._stop_action.setEnabled(False)
         self._show_message("Agent 已停止")
 
     def _show_ops_panel(self, panel_type: str) -> None:
         """显示运营工具面板"""
         from presentation.ops.debugger import RuntimePanel, EventMonitor
-        from presentation.ops.eval_workbench import EvalWorkbench
-        from presentation.ops.knowledge_editor import KnowledgeEditor
-        from presentation.ops.safety_panel import SafetyPanel
-        from presentation.ops.multi_agent_orchestrator import MultiAgentOrchestrator
         from presentation.ops.log_viewer import LogViewer
-        from presentation.ops.deploy_manager import DeployManager
 
         panel_map = {
             "debugger": ("🔧 调试器", RuntimePanel),
-            "evaluator": ("📊 评估", EvalWorkbench),
-            "knowledge": ("📖 知识库", KnowledgeEditor),
-            "safety": ("🔒 安全", SafetyPanel),
-            "multi_agent": ("🤖 编排", MultiAgentOrchestrator),
             "logger": ("📋 日志", LogViewer),
-            "deploy": ("🚀 部署", DeployManager),
         }
 
         if panel_type not in panel_map:
@@ -1527,18 +1318,15 @@ class MainWindow(QMainWindow):
                     ("📁 新建项目", "new_project", "Ctrl+N"),
                     ("📂 打开项目", "open_project", "Ctrl+O"),
                     ("💾 保存", "save", "Ctrl+S"),
-                    ("🔧 图编辑器", "show_graph", ""),
-                    ("📝 Prompt 管理器", "show_prompt", ""),
-                    ("🔨 工具管理器", "show_tools", ""),
+                    ("🔧 图查看器", "show_graph", ""),
+                    ("📝 提示词管理器", "show_prompt", ""),
+                    ("🎯 Skill 管理器", "show_skills", ""),
+                    ("▶️ 运行控制台", "show_runtime", ""),
+                    ("📡 事件监视", "show_events", ""),
+                    ("📋 日志查看", "show_logs", ""),
                     ("▶️ 运行 Agent", "run_agent", "F5"),
                     ("⏹️ 停止 Agent", "stop_agent", "Shift+F5"),
                     ("🔍 运行时调试器", "debugger", ""),
-                    ("📊 评估工作台", "evaluator", ""),
-                    ("📖 知识库编辑器", "knowledge", ""),
-                    ("🔒 安全护栏", "safety", ""),
-                    ("🤖 多 Agent 编排", "multi_agent", ""),
-                    ("📋 日志追踪", "logger", ""),
-                    ("🚀 部署管理", "deploy", ""),
                     ("⚙️ 设置", "settings", "Ctrl+,"),
                     ("🎨 Dark 主题", "theme_dark", ""),
                     ("🎨 Light 主题", "theme_light", ""),
@@ -1622,18 +1410,16 @@ class MainWindow(QMainWindow):
             "new_project": self._on_new_project,
             "open_project": self._on_open_project,
             "save": self._on_save,
-            "show_graph": lambda: self.center_panel.show_graph_editor(),
-            "show_prompt": lambda: self.center_panel.show_prompt_editor(),
-            "show_tools": lambda: self.center_panel.show_tool_manager(self.right_panel),
+            "show_graph": lambda: self.center_panel.show_graph_viewer(),
+            "show_prompt": lambda: self.center_panel.show_prompt_manager(),
+            "show_skills": lambda: self.center_panel.show_skill_manager(),
+            "show_runtime": lambda: self.center_panel.show_runtime_panel(),
+            "show_events": lambda: self.center_panel.show_event_monitor(),
+            "show_logs": lambda: self.center_panel.show_log_viewer(),
             "run_agent": self._on_run_agent,
             "stop_agent": self._on_stop_agent,
             "debugger": lambda: self._show_ops_panel("debugger"),
-            "evaluator": lambda: self._show_ops_panel("evaluator"),
-            "knowledge": lambda: self._show_ops_panel("knowledge"),
-            "safety": lambda: self._show_ops_panel("safety"),
-            "multi_agent": lambda: self._show_ops_panel("multi_agent"),
             "logger": lambda: self._show_ops_panel("logger"),
-            "deploy": lambda: self._show_ops_panel("deploy"),
             "settings": self._on_settings,
             "theme_dark": lambda: theme_manager.apply("dark"),
             "theme_light": lambda: theme_manager.apply("light"),
