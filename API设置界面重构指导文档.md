@@ -1,3 +1,72 @@
+# API 设置界面重构指导文档 — Trae 模型管理风格
+
+> 目标：将设置对话框改为 Trae 风格的「模型管理」界面
+> 涉及文件：`2workbench/presentation/dialogs/settings_dialog.py`
+> 预估工作量：2-3 小时
+
+---
+
+## 一、目标效果
+
+### 截图1：添加模型表单（点击"+ 添加模型"弹出）
+```
+┌─────────────────────────────────────┐
+│  添加模型                        ✕  │
+│                                     │
+│  * 模型                              │
+│  ┌─────────────────────────────┐    │
+│  │ 选择模型                  ▼ │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  * API 密钥                          │
+│  ┌─────────────────────────────┐    │
+│  │ 输入 API 密钥               │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│    自定义请求地址              ⓘ    │
+│  ┌─────────────────────────────┐    │
+│  │ 例如 https://api.openai.com │    │
+│  │     /v1/chat/completions    │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │         添加模型             │    │
+│  └─────────────────────────────┘    │
+└─────────────────────────────────────┘
+```
+
+### 截图2：模型管理列表（设置对话框主界面）
+```
+┌──────────────────────────────────────────────────────┐
+│  模型                                                 │
+│                                                      │
+│  模型管理                                             │
+│  配置 API key 添加更多可用模型，预置模型默认使用稳定版本。  │
+│                                                      │
+│  [+ 添加模型]                                         │
+│                                                      │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │ 模型                    │ 服务商    │ 操作       │ │
+│  ├──────────────────────────┼──────────┼───────────┤ │
+│  │ ▼ 内置                                             │ │
+│  │   deepseek-v4            │ 预置      │    -      │ │
+│  │   gpt-4o                 │ 预置      │    -      │ │
+│  │   claude-sonnet-4        │ 预置      │    -      │ │
+│  ├──────────────────────────┼──────────┼───────────┤ │
+│  │ ▼ 自定义                                           │ │
+│  │   deepseek-v4-pro        │ DeepSeek  │ ✎ 🗑 ●   │ │
+│  │   my-gpt4                │ OpenAI    │ ✎ 🗑 ○   │ │
+│  └──────────────────────────┴──────────┴───────────┘ │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## 二、完整代码
+
+将 `settings_dialog.py` 整体替换为以下代码：
+
+```python
 """设置对话框 — Trae 风格模型管理
 
 主界面为模型列表（内置 + 自定义），点击"+ 添加模型"弹出添加表单。
@@ -159,67 +228,67 @@ class AddModelDialog(QDialog):
         text_sec = p.get("text_secondary", "#858585")
         font = p.get("font_family", "sans-serif")
 
-        self.setStyleSheet("""
-            QDialog {
-                background-color: """ + bg_card + """;
-                border: 1px solid """ + border + """;
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {bg_card};
+                border: 1px solid {border};
                 border-radius: 8px;
-            }
-            QLabel#dialogTitle {
-                color: """ + text_bright + """;
+            }}
+            QLabel#dialogTitle {{
+                color: {text_bright};
                 font-size: 16px;
                 font-weight: 600;
-                font-family: """ + font + """;
+                font-family: {font};
                 background: transparent;
-            }
-            QPushButton#dialogCloseBtn {
-                color: """ + text_sec + """;
+            }}
+            QPushButton#dialogCloseBtn {{
+                color: {text_sec};
                 border: none;
                 background: transparent;
                 font-size: 14px;
                 border-radius: 4px;
-            }
-            QPushButton#dialogCloseBtn:hover {
-                color: """ + text_bright + """;
-                background-color: """ + p.get("bg_hover", "#3e3e42") + """;
-            }
-            QLabel#formLabel {
-                color: """ + text + """;
+            }}
+            QPushButton#dialogCloseBtn:hover {{
+                color: {text_bright};
+                background-color: {p.get("bg_hover", "#3e3e42")};
+            }}
+            QLabel#formLabel {{
+                color: {text};
                 font-size: 13px;
-                font-family: """ + font + """;
+                font-family: {font};
                 background: transparent;
-            }
-            QLineEdit#formInput {
-                background-color: """ + bg_input + """;
-                color: """ + text_bright + """;
-                border: 1px solid """ + border + """;
+            }}
+            QLineEdit#formInput {{
+                background-color: {bg_input};
+                color: {text_bright};
+                border: 1px solid {border};
                 border-radius: 6px;
                 padding: 8px 12px;
                 font-size: 13px;
-                font-family: """ + font + """;
-            }
-            QLineEdit#formInput:focus {
-                border-color: """ + accent + """;
-            }
-            QPushButton#infoBtn {
-                color: """ + text_sec + """;
+                font-family: {font};
+            }}
+            QLineEdit#formInput:focus {{
+                border-color: {accent};
+            }}
+            QPushButton#infoBtn {{
+                color: {text_sec};
                 border: none;
                 background: transparent;
                 font-size: 12px;
-            }
-            QPushButton#submitBtn {
-                background-color: """ + p.get("bg_hover", "#3e3e42") + """;
-                color: """ + text_bright + """;
-                border: 1px solid """ + border + """;
+            }}
+            QPushButton#submitBtn {{
+                background-color: {p.get("bg_hover", "#3e3e42")};
+                color: {text_bright};
+                border: 1px solid {border};
                 border-radius: 6px;
                 font-size: 14px;
                 font-weight: 500;
-                font-family: """ + font + """;
-            }
-            QPushButton#submitBtn:hover {
-                background-color: """ + accent + """;
-                border-color: """ + accent + """;
-            }
+                font-family: {font};
+            }}
+            QPushButton#submitBtn:hover {{
+                background-color: {accent};
+                border-color: {accent};
+            }}
         """)
 
 
@@ -536,136 +605,136 @@ class ModelListWidget(QWidget):
         error = p.get("error", "#f44747")
         font = p.get("font_family", "sans-serif")
 
-        self.setStyleSheet("""
-            QWidget {
-                background-color: """ + bg + """;
-                font-family: """ + font + """;
-            }
-            QLabel#pageTitle {
-                color: """ + text_bright + """;
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {bg};
+                font-family: {font};
+            }}
+            QLabel#pageTitle {{
+                color: {text_bright};
                 font-size: 20px;
                 font-weight: 600;
                 background: transparent;
-            }
-            QLabel#sectionTitle {
-                color: """ + text_bright + """;
+            }}
+            QLabel#sectionTitle {{
+                color: {text_bright};
                 font-size: 14px;
                 font-weight: 600;
                 background: transparent;
-            }
-            QLabel#sectionDesc {
-                color: """ + text_sec + """;
+            }}
+            QLabel#sectionDesc {{
+                color: {text_sec};
                 font-size: 12px;
                 background: transparent;
-            }
-            QPushButton#addModelBtn {
-                color: """ + text_bright + """;
-                background-color: """ + bg_ter + """;
-                border: 1px solid """ + border + """;
+            }}
+            QPushButton#addModelBtn {{
+                color: {text_bright};
+                background-color: {bg_ter};
+                border: 1px solid {border};
                 border-radius: 6px;
                 font-size: 13px;
-                font-family: """ + font + """;
-            }
-            QPushButton#addModelBtn:hover {
-                background-color: """ + bg_hover + """;
-                border-color: """ + accent + """;
-            }
+                font-family: {font};
+            }}
+            QPushButton#addModelBtn:hover {{
+                background-color: {bg_hover};
+                border-color: {accent};
+            }}
 
             /* 列表框架 */
-            QFrame#listFrame {
-                background-color: """ + bg_sec + """;
-                border: 1px solid """ + border + """;
+            QFrame#listFrame {{
+                background-color: {bg_sec};
+                border: 1px solid {border};
                 border-radius: 6px;
-            }
-            QFrame#listHeader {
-                background-color: """ + bg_ter + """;
-                border-bottom: 1px solid """ + border + """;
+            }}
+            QFrame#listHeader {{
+                background-color: {bg_ter};
+                border-bottom: 1px solid {border};
                 border-radius: 6px 6px 0 0;
-            }
-            QLabel#headerLabel {
-                color: """ + text_sec + """;
+            }}
+            QLabel#headerLabel {{
+                color: {text_sec};
                 font-size: 12px;
                 font-weight: 500;
                 background: transparent;
-            }
+            }}
 
             /* 分组 */
-            QFrame#modelSection {
-                background-color: """ + bg_sec + """;
+            QFrame#modelSection {{
+                background-color: {bg_sec};
                 border: none;
-            }
-            QFrame#sectionRow {
-                background-color: """ + bg_ter + """;
-                border-bottom: 1px solid """ + border + """;
-            }
-            QLabel#chevron {
-                color: """ + text_sec + """;
+            }}
+            QFrame#sectionRow {{
+                background-color: {bg_ter};
+                border-bottom: 1px solid {border};
+            }}
+            QLabel#chevron {{
+                color: {text_sec};
                 font-size: 10px;
                 background: transparent;
                 padding-right: 6px;
-            }
-            QLabel#sectionLabel {
-                color: """ + text + """;
+            }}
+            QLabel#sectionLabel {{
+                color: {text};
                 font-size: 12px;
                 font-weight: 500;
                 background: transparent;
-            }
+            }}
 
             /* 模型行 */
-            QFrame#modelRow {
-                border-bottom: 1px solid """ + border + """;
-            }
-            QFrame#modelRow:hover {
-                background-color: """ + bg_hover + """;
-            }
-            QLabel#modelName {
-                color: """ + text_bright + """;
+            QFrame#modelRow {{
+                border-bottom: 1px solid {border};
+            }}
+            QFrame#modelRow:hover {{
+                background-color: {bg_hover};
+            }}
+            QLabel#modelName {{
+                color: {text_bright};
                 font-size: 13px;
                 background: transparent;
-            }
-            QLabel#modelProvider {
-                color: """ + text_sec + """;
+            }}
+            QLabel#modelProvider {{
+                color: {text_sec};
                 font-size: 12px;
                 background: transparent;
-            }
-            QLabel#dashLabel {
-                color: """ + text_sec + """;
+            }}
+            QLabel#dashLabel {{
+                color: {text_sec};
                 font-size: 12px;
                 background: transparent;
-            }
+            }}
 
             /* 行操作按钮 */
-            QPushButton#rowActionBtn {
-                color: """ + text_sec + """;
+            QPushButton#rowActionBtn {{
+                color: {text_sec};
                 border: none;
                 background: transparent;
                 font-size: 13px;
                 border-radius: 4px;
-            }
-            QPushButton#rowActionBtn:hover {
-                color: """ + text_bright + """;
-                background-color: """ + bg_hover + """;
-            }
-            QPushButton#rowActionBtn[danger="true"]:hover {
-                color: """ + error + """;
-            }
+            }}
+            QPushButton#rowActionBtn:hover {{
+                color: {text_bright};
+                background-color: {bg_hover};
+            }}
+            QPushButton#rowActionBtn[danger="true"]:hover {{
+                color: {error};
+            }}
 
             /* 开关按钮 */
-            QPushButton#toggleBtn {
-                color: """ + success + """;
+            QPushButton#toggleBtn {{
+                color: {success};
                 border: none;
                 background: transparent;
                 font-size: 16px;
-            }
-            QPushButton#toggleBtn:hover {
-                color: """ + success + """;
-            }
-            QPushButton#toggleBtn#off {
-                color: """ + text_sec + """;
-            }
-            QPushButton#toggleBtn#off:hover {
-                color: """ + text + """;
-            }
+            }}
+            QPushButton#toggleBtn:hover {{
+                color: {success};
+            }}
+            QPushButton#toggleBtn#off {{
+                color: {text_sec};
+            }}
+            QPushButton#toggleBtn#off:hover {{
+                color: {text};
+            }}
         """)
 
 
@@ -692,10 +761,77 @@ class SettingsDialog(QDialog):
         p = theme_manager.PALETTES.get(theme_manager.current_theme, {})
         bg = p.get("bg_primary", "#1e1e1e")
         border = p.get("border", "#3e3e42")
-        self.setStyleSheet("""
-            QDialog {
-                background-color: """ + bg + """;
-                border: 1px solid """ + border + """;
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {bg};
+                border: 1px solid {border};
                 border-radius: 8px;
-            }
+            }}
         """)
+```
+
+---
+
+## 三、关键改动说明
+
+| 改动点 | 旧 | 新 |
+|--------|-----|-----|
+| **整体布局** | QTabWidget 两页表单 | 模型管理列表 + 弹出式添加表单 |
+| **添加模型** | 在表单中填写所有字段 | 点击"+ 添加模型"弹出极简对话框（3个字段） |
+| **模型列表** | 无 | 内置模型（只读）+ 自定义模型（可编辑/删除/开关） |
+| **数据存储** | 写入 `.env` 文件 | 自定义模型存 `data/custom_models.json`，内置模型硬编码 |
+| **服务商识别** | 手动选择 deepseek/openai/anthropic | 根据模型名自动识别（deepseek→DeepSeek, gpt→OpenAI...） |
+| **启用/禁用** | 无 | 自定义模型有开关按钮，禁用后不参与 API 调用 |
+| **主题** | 无 | 完整接入 theme_manager |
+
+## 四、数据流
+
+```
+添加模型 → AddModelDialog → 保存到 custom_models.json → 刷新列表
+编辑模型 → AddModelDialog(edit_data) → 更新 custom_models.json → 刷新列表
+删除模型 → 确认弹窗 → 从 custom_models.json 移除 → 刷新列表
+启用/禁用 → 切换 enabled 字段 → 保存 → 刷新列表
+```
+
+## 五、后续集成（可选）
+
+如果需要让自定义模型真正参与 API 调用，需要在 `foundation/config.py` 的 `Settings` 类中添加：
+
+```python
+# 在 Settings 类中添加
+custom_models_file: str = "./data/custom_models.json"
+
+def get_all_provider_configs(self) -> Dict[str, LLMProviderConfig]:
+    """获取所有已配置的供应商（包括自定义）"""
+    configs = {}
+    # 原有三个预置
+    for name in ["deepseek", "openai", "anthropic"]:
+        configs[name] = self.get_provider_config(name)
+    # 加载自定义
+    from pathlib import Path
+    import json
+    custom_path = Path(self.custom_models_file)
+    if custom_path.exists():
+        with open(custom_path, "r", encoding="utf-8") as f:
+            for m in json.load(f):
+                if m.get("enabled", True) and m.get("api_key"):
+                    configs[m["model"]] = LLMProviderConfig(
+                        api_key=m["api_key"],
+                        base_url=m.get("base_url", ""),
+                        model=m["model"],
+                    )
+    return configs
+```
+
+## 六、验收标准
+
+- [ ] 主界面显示模型列表，分为"内置"和"自定义"两个分组
+- [ ] 内置模型显示模型名 + "预置" + "-"（不可操作）
+- [ ] 点击"+ 添加模型"弹出无边框对话框，包含模型/API Key/地址三个字段
+- [ ] 填写后点"添加模型"，新模型出现在"自定义"分组中
+- [ ] 自定义模型有编辑✎、删除🗑、开关●三个操作
+- [ ] 编辑弹出同一对话框，预填数据
+- [ ] 删除有确认弹窗
+- [ ] 开关切换启用/禁用状态
+- [ ] 数据持久化到 `data/custom_models.json`
+- [ ] 暗色/亮色主题正确

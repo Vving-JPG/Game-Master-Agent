@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -89,10 +90,27 @@ async def node_build_prompt(state: AgentState) -> dict[str, Any]:
     event = state.get("current_event", {})
     event_text = event.get("_formatted_text", event.get("data", {}).get("raw_text", ""))
 
-    # 获取 Skill 内容（简化版，实际应从 SkillLoader 获取）
+    # 获取 Skill 内容
     skill_contents = []
     active_skills = state.get("active_skills", [])
-    # TODO: P3 阶段接入 SkillLoader
+    if not active_skills:
+        # 自动加载 Skill
+        try:
+            from feature.ai.skill_loader import SkillLoader
+            skills_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'skills')
+            if os.path.isdir(skills_dir):
+                loader = SkillLoader(skills_dir)
+                relevant = loader.get_relevant_skills(
+                    user_input=state.get("current_event", ""),
+                    event_type="player_action",
+                    context_hints=["narrative", "world_building"]
+                )
+                for skill in relevant:
+                    content = loader.load_activation(skill)
+                    if content:
+                        skill_contents.append(content)
+        except Exception:
+            pass  # Skill 加载失败不影响主流程
 
     # 组装 Prompt
     system_prompt = _get_system_prompt()
@@ -275,6 +293,18 @@ async def node_execute_commands(state: AgentState) -> dict[str, Any]:
             results.append({"intent": intent, "success": False, "result": f"error: {e}"})
             logger.error(f"命令执行失败 ({intent}): {e}")
 
+    # 将工具执行结果格式化并追加到对话历史，让 LLM 知道执行结果
+    if results:
+        results_text = "\n".join([
+            f"[工具结果] {r.get('intent', 'unknown')}: {r.get('result', '无结果')}"
+            for r in results
+        ])
+        if results_text:
+            state["messages"].append({
+                "role": "tool",
+                "content": results_text
+            })
+
     event_bus.emit(create_node_event("execute_commands", "completed", {
         "executed": len(results),
     }))
@@ -383,6 +413,25 @@ def _get_system_prompt() -> str:
 - `update_npc_relationship` — 修改 NPC 关系
 - `update_quest_status` — 更新任务状态
 - `store_memory` — 存储记忆
+
+## 世界构建命令（可随时使用）
+- create_npc: 创建新的 NPC 角色（需提供名称，可选地点/性格/背景/说话风格/目标/心情）
+- search_npcs: 搜索/查询 NPC（可按地点或名称过滤）
+- create_location: 创建新的地点（需提供名称，可选描述和出口连接）
+- create_item: 创建新的物品/道具（需提供名称，可选类型/稀有度/描述）
+- create_quest: 创建新的任务/剧情（需提供标题，可选描述/类型/奖励/前置条件）
+- get_world_state: 获取完整世界状态概览（所有地点/NPC/物品/任务）
+- update_npc_state: 更新 NPC 状态（心情/位置/目标）
+
+## 世界构建指导原则
+1. 在故事推进过程中，根据需要动态创建 NPC、地点和物品
+2. 创建前先用 get_world_state 或 search_npcs 检查是否已存在同名实体
+3. 创建的实体应与当前故事情境一致，符合世界观设定
+4. 每个新地点应有独特的描述和氛围（包含视觉/听觉/嗅觉细节）
+5. NPC 应有鲜明的个性和说话风格，心情应反映当前情境
+6. 物品应有合理的属性和背景故事，稀有度要适当
+7. 任务应有明确的目标和合理的奖励
+8. 创建后通过叙事自然地介绍给玩家，不要生硬地列出属性
 
 ## 风格要求
 

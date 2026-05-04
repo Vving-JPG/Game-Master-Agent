@@ -146,6 +146,12 @@ class LocationRepo(BaseRepository):
             db.execute(f"UPDATE locations SET {sets}, updated_at = datetime('now') WHERE id = ?", values)
             return self.get_by_id(location_id, db_path)
 
+    def delete(self, location_id: int, db_path: str | None = None) -> bool:
+        """删除地点"""
+        with get_db(db_path) as db:
+            cursor = db.execute("DELETE FROM locations WHERE id = ?", (location_id,))
+            return cursor.rowcount > 0
+
 
 # ========== PlayerRepo ==========
 
@@ -275,6 +281,12 @@ class NPCRepo(BaseRepository):
             db.execute(f"UPDATE npcs SET {sets}, updated_at = datetime('now') WHERE id = ?", values)
             return self.get_by_id(npc_id, db_path)
 
+    def delete(self, npc_id: int, db_path: str | None = None) -> bool:
+        """删除 NPC"""
+        with get_db(db_path) as db:
+            cursor = db.execute("DELETE FROM npcs WHERE id = ?", (npc_id,))
+            return cursor.rowcount > 0
+
     def _row_to_npc(self, row) -> NPC:
         """将 SQLite Row 转换为 NPC（处理 JSON 字段）"""
         if row is None:
@@ -312,6 +324,36 @@ class ItemRepo(BaseRepository):
     def search(self, name: str, db_path: str | None = None) -> list[Item]:
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM items WHERE name LIKE ?", (f"%{name}%",)).fetchall()
+            return [self._row_to_item(r) for r in rows]
+
+    def update(self, item_id: int, db_path: str | None = None, **kwargs) -> Item | None:
+        """更新道具"""
+        with get_db(db_path) as db:
+            item = self.get_by_id(item_id, db_path)
+            if not item:
+                return None
+            sets = []
+            values = []
+            for key, value in kwargs.items():
+                if hasattr(item, key):
+                    sets.append(f"{key} = ?")
+                    values.append(value)
+            if not sets:
+                return item
+            values.append(item_id)
+            db.execute(f"UPDATE items SET {', '.join(sets)} WHERE id = ?", values)
+            return self.get_by_id(item_id, db_path)
+
+    def delete(self, item_id: int, db_path: str | None = None) -> bool:
+        """删除道具"""
+        with get_db(db_path) as db:
+            cursor = db.execute("DELETE FROM items WHERE id = ?", (item_id,))
+            return cursor.rowcount > 0
+
+    def list_all(self, db_path: str | None = None) -> list[Item]:
+        """列出所有道具"""
+        with get_db(db_path) as db:
+            rows = db.execute("SELECT * FROM items ORDER BY id").fetchall()
             return [self._row_to_item(r) for r in rows]
 
     def _row_to_item(self, row) -> Item:
@@ -362,6 +404,31 @@ class QuestRepo(BaseRepository):
         with get_db(db_path) as db:
             db.execute("UPDATE quests SET status = ?, updated_at = datetime('now') WHERE id = ?", (status, quest_id))
             return True
+
+    def delete(self, quest_id: int, db_path: str | None = None) -> bool:
+        """删除任务及其步骤"""
+        with get_db(db_path) as db:
+            db.execute("DELETE FROM quest_steps WHERE quest_id = ?", (quest_id,))
+            cursor = db.execute("DELETE FROM quests WHERE id = ?", (quest_id,))
+            return cursor.rowcount > 0
+
+    def update(self, quest_id: int, db_path: str | None = None, **kwargs) -> Quest | None:
+        """通用更新任务"""
+        with get_db(db_path) as db:
+            quest = self.get_by_id(quest_id, db_path)
+            if not quest:
+                return None
+            sets = []
+            values = []
+            for key, value in kwargs.items():
+                if hasattr(quest, key):
+                    sets.append(f"{key} = ?")
+                    values.append(value)
+            if not sets:
+                return quest
+            values.append(quest_id)
+            db.execute(f"UPDATE quests SET {', '.join(sets)} WHERE id = ?", values)
+            return self.get_by_id(quest_id, db_path)
 
     def _row_to_quest(self, row) -> Quest:
         if row is None:

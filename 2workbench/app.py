@@ -197,6 +197,10 @@ def main() -> None:
     window = MainWindow()
     window.show()
 
+    # 10. 启动事件循环
+    from foundation.logger import get_logger
+    logger = get_logger(__name__)
+
     # 9. 开发模式：启动热重载
     if args.dev:
         from foundation.hot_reload import create_reloader_for_project
@@ -204,9 +208,6 @@ def main() -> None:
         reloader.start_background()
         logger.info("开发模式：热重载已启用")
 
-    # 10. 启动事件循环
-    from foundation.logger import get_logger
-    logger = get_logger(__name__)
     logger.info("Game Master Agent IDE 启动完成")
 
     loop = qasync.QEventLoop(app)

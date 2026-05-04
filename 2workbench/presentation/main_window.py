@@ -1268,7 +1268,8 @@ class MainWindow(QMainWindow):
         self._show_message("Agent 运行中...")
 
         # 创建 Agent 实例并运行
-        self._current_agent = GMAgent(world_id=1)
+        from foundation.config import settings
+        self._current_agent = GMAgent(world_id=1, db_path=settings.database_path)
 
         # === 使用项目编译的图 ===
         try:

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # ---- 数据库 ----
-    database_path: str = "./data/game.db"
+    database_path: str = "./data/default.db"
     database_wal_mode: bool = True
 
     # ---- 日志 ----

@@ -54,9 +54,20 @@ class GMAgent:
     ):
         self._world_id = world_id
         self._db_path = db_path
-        self._system_prompt = system_prompt
+        self._custom_system_prompt = system_prompt
+        self._skills_dir = skills_dir
         self._execution_state = "idle"
         self._last_result: dict[str, Any] = {}
+
+        # 初始化 SkillLoader
+        self._skill_loader = None
+        if skills_dir:
+            try:
+                from feature.ai.skill_loader import SkillLoader
+                self._skill_loader = SkillLoader(skills_dir)
+            except Exception as e:
+                from foundation.logger import get_logger
+                get_logger(__name__).warning(f"SkillLoader 初始化失败: {e}")
 
         # 图实例（优先使用 graph.json 编译的图）
         self._graph = _default_gm_graph
@@ -95,6 +106,10 @@ class GMAgent:
 
         except Exception as e:
             logger.warning(f"加载游戏状态失败: {e}")
+
+        # 注入自定义 system_prompt
+        if self._custom_system_prompt:
+            state["system_prompt"] = self._custom_system_prompt
 
         return state
 

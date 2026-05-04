@@ -142,6 +142,44 @@ class PromptBuilder:
 
         parts.append(f"- 回合数: {state.get('turn_count', 0)}")
 
+        # 当前地点详情
+        current_loc_id = state.get("current_location", {}).get("id", 0)
+        if current_loc_id:
+            try:
+                from core.models.repository import LocationRepo
+                from foundation.config import settings
+                db_path = getattr(settings, 'database_path', 'data/game.db')
+                loc_repo = LocationRepo()
+                location = loc_repo.get_by_id(current_loc_id, db_path=db_path)
+                if location:
+                    parts.append(f"\n**当前地点详情**: {location.name}")
+                    if location.description:
+                        parts.append(f"  {location.description}")
+                    if location.connections:
+                        exits = ", ".join([f"{d}" for d in location.connections.keys()])
+                        parts.append(f"  可用出口: {exits}")
+            except Exception:
+                pass
+
+        # 当前场景 NPC 详情
+        active_npcs = state.get("active_npcs", [])
+        if active_npcs:
+            try:
+                from core.models.repository import NPCRepo
+                from foundation.config import settings
+                db_path = getattr(settings, 'database_path', 'data/game.db')
+                npc_repo = NPCRepo()
+                for npc_ref in active_npcs[:3]:  # 最多显示 3 个
+                    npc_id = npc_ref if isinstance(npc_ref, int) else npc_ref.get('id', 0)
+                    if npc_id:
+                        npc = npc_repo.get_by_id(npc_id, db_path=db_path)
+                        if npc:
+                            parts.append(f"\n**NPC {npc.name}**: 心情={npc.mood}, 说话风格={npc.speech_style or '未知'}")
+                            if npc.backstory:
+                                parts.append(f"  背景: {npc.backstory[:100]}")
+            except Exception:
+                pass
+
         return "\n".join(parts)
 
     def _extract_history(self, state: AgentState, max_turns: int) -> list[LLMMessage]:
