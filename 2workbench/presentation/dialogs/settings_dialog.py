@@ -1,29 +1,30 @@
 """设置对话框 — Trae 风格模型管理
 
 主界面为模型列表，点击"+ 添加模型"弹出添加表单。
-自定义模型支持编辑、删除。
+自定义模型支持编辑、删除、测试。
+
+架构：
+- ModelManager: 数据层，负责配置持久化
+- ModelListWidget: 表现层，负责 UI 渲染
+- ApiTester: 功能层，负责 API 测试
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QLabel,
-    QWidget, QFrame, QMessageBox,
+    QWidget, QFrame, QMessageBox, QLayout,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from foundation.logger import get_logger
 from presentation.theme.manager import theme_manager
+from presentation.dialogs.model_manager import ModelManager, ModelConfig
+from feature.services import ApiTester, TestResult
 
 logger = get_logger(__name__)
-
-# 相对于项目目录的路径
-CUSTOM_MODELS_FILE = Path("data/custom_models.json")
-CONFIG_FILE = Path("config/config.json")
 
 
 class AddModelDialog(QDialog):
@@ -36,9 +37,7 @@ class AddModelDialog(QDialog):
 
         self.setWindowTitle("编辑模型" if edit_data else "添加模型")
         self.setFixedSize(380, 300)
-        self.setWindowFlags(
-            Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint
-        )
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self._setup_ui()
         self._apply_theme()
         if edit_data:
@@ -109,6 +108,11 @@ class AddModelDialog(QDialog):
         if not model or not api_key:
             QMessageBox.warning(self, "提示", "请填写模型名称和 API 密钥")
             return
+
+        if len(api_key) > 200 or "\n" in api_key or "\t" in api_key:
+            QMessageBox.warning(self, "提示", "API 密钥格式不正确")
+            return
+
         self._result = {
             "model": model,
             "api_key": api_key,
@@ -180,37 +184,56 @@ class AddModelDialog(QDialog):
 
 
 class ModelListWidget(QWidget):
-    """模型列表组件"""
+    """模型列表组件 — 表现层
+    
+    依赖 ModelManager 进行数据操作，自身只负责 UI 渲染。
+    """
 
     model_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, model_manager: ModelManager | None = None):
         super().__init__(parent)
-        self._custom_models: List[Dict[str, Any]] = []
-        self._load_custom_models()
+        # 如果没有传入 model_manager，创建一个并尝试加载项目路径
+        if model_manager is None:
+            model_manager = ModelManager()
+            # 尝试从 project_manager 获取项目路径
+            try:
+                from presentation.project.manager import project_manager
+                if project_manager.project_path:
+                    model_manager.set_project_path(project_manager.project_path)
+            except Exception:
+                pass
+        self._manager = model_manager
+        self._manager.add_listener(self._on_data_changed)
         self._build_ui()
         self._apply_theme()
 
-    # ============================================================ UI
+    def set_model_manager(self, manager: ModelManager) -> None:
+        """设置模型管理器"""
+        if self._manager:
+            self._manager.remove_listener(self._on_data_changed)
+        self._manager = manager
+        self._manager.add_listener(self._on_data_changed)
+        self.refresh()
+
+    def _on_data_changed(self) -> None:
+        """数据变更回调"""
+        self.refresh()
+        self.model_changed.emit()
+
+    # ============================================================ UI 构建
     def _build_ui(self) -> None:
-        """完整构建 UI（初始化和 refresh 都调用此方法）"""
+        """构建 UI"""
         old_layout = self.layout()
         if old_layout:
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                w = item.widget()
-                if w:
-                    w.setParent(None)
-                    w.deleteLater()
-                elif item.layout():
-                    self._clear_layout(item.layout())
-            QWidget().setLayout(old_layout)
+            self._clear_layout(old_layout)
+            old_layout.deleteLater()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 标题 + 添加按钮 同一行
+        # 标题 + 添加按钮
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 8)
         title = QLabel("模型管理")
@@ -235,8 +258,9 @@ class ModelListWidget(QWidget):
 
         self._list_layout.addWidget(self._make_header())
 
-        if self._custom_models:
-            for m in self._custom_models:
+        models = self._manager.get_models()
+        if models:
+            for m in models:
                 self._list_layout.addWidget(self._make_row(m))
         else:
             self._list_layout.addWidget(self._make_empty())
@@ -244,7 +268,7 @@ class ModelListWidget(QWidget):
         layout.addWidget(list_frame)
 
     @staticmethod
-    def _clear_layout(ly) -> None:
+    def _clear_layout(ly: QLayout) -> None:
         while ly.count():
             item = ly.takeAt(0)
             w = item.widget()
@@ -276,7 +300,7 @@ class ModelListWidget(QWidget):
         lbl.setFixedHeight(48)
         return lbl
 
-    def _make_row(self, data: Dict) -> QFrame:
+    def _make_row(self, data: ModelConfig) -> QFrame:
         row = QFrame()
         row.setObjectName("modelRow")
         row.setFixedHeight(36)
@@ -284,11 +308,11 @@ class ModelListWidget(QWidget):
         rl.setContentsMargins(12, 0, 12, 0)
         rl.setSpacing(0)
 
-        name = QLabel(data.get("model", ""))
+        name = QLabel(data.model)
         name.setObjectName("modelName")
         rl.addWidget(name, stretch=5)
 
-        prov = QLabel(data.get("provider", "自定义"))
+        prov = QLabel(data.provider)
         prov.setObjectName("modelProvider")
         prov.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rl.addWidget(prov, stretch=2)
@@ -296,18 +320,23 @@ class ModelListWidget(QWidget):
         al = QHBoxLayout()
         al.setSpacing(6)
         al.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignRight)
-        mid = data.get("id", "")
+
+        test_btn = QPushButton("测试")
+        test_btn.setObjectName("rowActionBtnTest")
+        test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        test_btn.clicked.connect(lambda _, m=data.id: self._on_test(m))
+        al.addWidget(test_btn)
 
         edit_btn = QPushButton("配置")
         edit_btn.setObjectName("rowActionBtn")
         edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        edit_btn.clicked.connect(lambda _, m=mid: self._on_edit(m))
+        edit_btn.clicked.connect(lambda _, m=data.id: self._on_edit(m))
         al.addWidget(edit_btn)
 
         del_btn = QPushButton("删除")
         del_btn.setObjectName("rowActionBtnDelete")
         del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        del_btn.clicked.connect(lambda _, m=mid: self._on_delete(m))
+        del_btn.clicked.connect(lambda _, m=data.id: self._on_delete(m))
         al.addWidget(del_btn)
 
         rl.addLayout(al, stretch=3)
@@ -318,36 +347,31 @@ class ModelListWidget(QWidget):
         dialog = AddModelDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             result = dialog.get_result()
-            if not result:
-                return
-            import uuid
-            result["id"] = str(uuid.uuid4())[:8]
-            result["provider"] = self._guess_provider(result["model"])
-            self._custom_models.append(result)
-            self._save()
-            self._sync_to_config()
-            self.refresh()
-            self.model_changed.emit()
+            if result:
+                self._manager.add_model(
+                    model=result["model"],
+                    api_key=result["api_key"],
+                    base_url=result.get("base_url", ""),
+                )
+                logger.info(f"添加模型成功: {result['model']}")
 
     def _on_edit(self, model_id: str) -> None:
-        data = next((m for m in self._custom_models if m.get("id") == model_id), None)
+        data = self._manager.get_model_by_id(model_id)
         if not data:
             logger.warning(f"编辑失败: 找不到模型 {model_id}")
             return
-        dialog = AddModelDialog(self, edit_data=data)
+        
+        dialog = AddModelDialog(self, edit_data=data.to_dict())
         if dialog.exec() == QDialog.DialogCode.Accepted:
             result = dialog.get_result()
-            if not result:
-                return
-            result["provider"] = self._guess_provider(result["model"])
-            for i, m in enumerate(self._custom_models):
-                if m.get("id") == model_id:
-                    self._custom_models[i] = result
-                    break
-            self._save()
-            self._sync_to_config()
-            self.refresh()
-            self.model_changed.emit()
+            if result:
+                self._manager.update_model(
+                    model_id=model_id,
+                    model=result["model"],
+                    api_key=result["api_key"],
+                    base_url=result.get("base_url", ""),
+                )
+                logger.info(f"编辑模型成功: {result['model']}")
 
     def _on_delete(self, model_id: str) -> None:
         reply = QMessageBox.question(
@@ -356,13 +380,78 @@ class ModelListWidget(QWidget):
             QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._custom_models = [
-                m for m in self._custom_models if m.get("id") != model_id
-            ]
-            self._save()
-            self._sync_to_config()
-            self.refresh()
-            self.model_changed.emit()
+            data = self._manager.get_model_by_id(model_id)
+            if self._manager.delete_model(model_id):
+                logger.info(f"删除模型成功: {data.model if data else 'unknown'}")
+
+    def _on_test(self, model_id: str) -> None:
+        """测试 API 连接"""
+        # 使用 ApiTester 服务（功能层）
+        if not hasattr(self, '_api_tester'):
+            self._api_tester = ApiTester()
+
+        # 取消之前的测试
+        if self._api_tester.is_testing():
+            self._api_tester.cancel_current_test()
+
+        data = self._manager.get_model_by_id(model_id)
+        if not data:
+            QMessageBox.warning(self, "测试失败", "找不到模型配置")
+            return
+
+        if not data.api_key:
+            QMessageBox.warning(self, "测试失败", "API 密钥为空")
+            return
+
+        self._test_dialog = QMessageBox(self)
+        self._test_dialog.setWindowTitle("测试中")
+        self._test_dialog.setText("正在测试 API 连接，请稍候...\n(点击取消中止测试)")
+        self._test_dialog.setStandardButtons(QMessageBox.StandardButton.Cancel)
+        self._test_dialog.setEscapeButton(QMessageBox.StandardButton.Cancel)
+        self._test_dialog.rejected.connect(self._on_test_cancelled)
+
+        # 使用 ApiTester 启动异步测试
+        self._api_tester.test_async(
+            model=data.model,
+            api_key=data.api_key,
+            base_url=data.base_url,
+            callback=self._on_test_result,
+        )
+
+        self._test_dialog.open()
+
+    def _on_test_cancelled(self) -> None:
+        """用户取消测试"""
+        if hasattr(self, '_api_tester') and self._api_tester:
+            self._api_tester.cancel_current_test()
+        self._test_dialog = None
+
+    def _on_test_result(self, result: TestResult) -> None:
+        """测试完成的回调"""
+        if not hasattr(self, '_test_dialog') or self._test_dialog is None:
+            logger.debug("测试对话框已关闭，忽略结果")
+            return
+
+        try:
+            self._test_dialog.rejected.disconnect(self._on_test_cancelled)
+        except TypeError:
+            pass
+
+        self._test_dialog.close()
+        self._test_dialog = None
+
+        if result.success:
+            QMessageBox.information(
+                self, "测试成功",
+                f"模型: {result.model_name}\n{result.message}\n\nAPI 连接正常！"
+            )
+            logger.info(f"API 测试成功: {result.model_name}")
+        else:
+            QMessageBox.critical(
+                self, "测试失败",
+                f"模型: {result.model_name}\n错误: {result.message}\n\n请检查密钥和地址"
+            )
+            logger.error(f"API 测试失败: {result.model_name}, 错误: {result.message}")
 
     # ============================================================ 刷新
     def refresh(self) -> None:
@@ -371,116 +460,6 @@ class ModelListWidget(QWidget):
         self.update()
         self.updateGeometry()
 
-    # ============================================================ 持久化
-    def _get_project_path(self) -> Path | None:
-        """获取当前项目路径"""
-        try:
-            from presentation.project.manager import project_manager
-            return project_manager.project_path
-        except Exception:
-            return None
-
-    def _load_custom_models(self) -> None:
-        """从项目目录加载自定义模型"""
-        project_path = self._get_project_path()
-        if not project_path:
-            self._custom_models = []
-            return
-        
-        models_file = Path(project_path) / CUSTOM_MODELS_FILE
-        if models_file.exists():
-            try:
-                self._custom_models = json.loads(
-                    models_file.read_text(encoding="utf-8")
-                )
-            except Exception as e:
-                logger.warning(f"加载自定义模型失败: {e}")
-                self._custom_models = []
-        else:
-            self._custom_models = []
-
-    def _save(self) -> None:
-        """保存自定义模型到项目目录"""
-        project_path = self._get_project_path()
-        if not project_path:
-            logger.warning("没有打开项目，无法保存模型配置")
-            return
-        
-        models_file = Path(project_path) / CUSTOM_MODELS_FILE
-        models_file.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            models_file.write_text(
-                json.dumps(self._custom_models, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception as e:
-            logger.error(f"保存自定义模型失败: {e}")
-
-    def _sync_to_config(self) -> None:
-        """同步到项目目录的 config/config.json"""
-        try:
-            project_path = self._get_project_path()
-            if not project_path:
-                logger.warning("没有打开项目，无法同步配置")
-                return
-            
-            config_file = Path(project_path) / CONFIG_FILE
-
-            config: Dict[str, Any] = {}
-            if config_file.exists():
-                try:
-                    config = json.loads(config_file.read_text(encoding="utf-8"))
-                except Exception:
-                    config = {}
-
-            if "providers" not in config:
-                config["providers"] = {}
-
-            for m in self._custom_models:
-                if not m.get("enabled", True):
-                    continue
-                model_name = m.get("model", "")
-                provider_key = self._provider_key(model_name)
-                config["providers"][provider_key] = {
-                    "api_key": m.get("api_key", ""),
-                    "base_url": m.get("base_url", ""),
-                    "model": model_name,
-                }
-
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-            config_file.write_text(
-                json.dumps(config, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            logger.info(f"配置已同步到 {config_file}")
-        except Exception as e:
-            logger.error(f"同步配置失败: {e}")
-
-    # ============================================================ 工具
-    @staticmethod
-    def _guess_provider(model_name: str) -> str:
-        n = model_name.lower()
-        if "deepseek" in n:   return "DeepSeek"
-        if "gpt" in n or "openai" in n: return "OpenAI"
-        if "claude" in n or "anthropic" in n: return "Anthropic"
-        if "qwen" in n:       return "Qwen"
-        if "glm" in n:        return "GLM"
-        return "自定义"
-
-    @staticmethod
-    def _provider_key(model_name: str) -> str:
-        n = model_name.lower()
-        if "deepseek" in n:   return "deepseek"
-        if "gpt" in n or "openai" in n: return "openai"
-        if "claude" in n or "anthropic" in n: return "anthropic"
-        if "qwen" in n:       return "qwen"
-        if "glm" in n:        return "glm"
-        return "custom"
-
-    def get_enabled_custom_models(self) -> List[Dict[str, Any]]:
-        return [m for m in self._custom_models if m.get("enabled", True)]
-
-    # ============================================================ 主题
     def _apply_theme(self) -> None:
         p = theme_manager.PALETTES.get(theme_manager.current_theme, {})
         bg = p.get("bg_primary", "#1e1e1e")
@@ -493,6 +472,7 @@ class ModelListWidget(QWidget):
         text_b = p.get("text_bright", "#ffffff")
         text_s = p.get("text_secondary", "#858585")
         error = p.get("error", "#f44747")
+        success = p.get("success", "#4ec9b0")
         font = p.get("font_family", "sans-serif")
 
         self.setStyleSheet(f"""
@@ -557,25 +537,34 @@ class ModelListWidget(QWidget):
                 color: {text_b}; background-color: {error};
                 border-color: {error};
             }}
+            QPushButton#rowActionBtnTest {{
+                color: {success}; background-color: transparent;
+                border: 1px solid {border}; font-size: 11px;
+                border-radius: 3px; padding: 2px 8px;
+            }}
+            QPushButton#rowActionBtnTest:hover {{
+                color: {text_b}; background-color: {success};
+                border-color: {success};
+            }}
         """)
 
 
 class SettingsDialog(QDialog):
     """设置对话框 — 模型管理"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, model_manager: ModelManager | None = None):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.setMinimumSize(460, 340)
         self.resize(460, 340)
-        self._setup_ui()
+        self._setup_ui(model_manager)
         self._apply_theme()
 
-    def _setup_ui(self) -> None:
+    def _setup_ui(self, model_manager: ModelManager | None) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(0)
-        self._model_list = ModelListWidget(self)
+        self._model_list = ModelListWidget(self, model_manager)
         layout.addWidget(self._model_list)
 
     def _apply_theme(self) -> None:

@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QLabel, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QFileSystemWatcher
 from PyQt6.QtWidgets import QSizePolicy
 from PyQt6.QtGui import QAction
 
@@ -48,7 +49,9 @@ class LeftPanel(BaseWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._project_path: str | None = None
         self._setup_ui()
+        self._setup_file_watcher()
 
     def _setup_ui(self) -> None:
         from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QHeaderView
@@ -76,7 +79,19 @@ class LeftPanel(BaseWidget):
         
         layout.addWidget(self.project_tree)
         logger.debug("[LeftPanel] UI 初始化完成")
-    
+
+    def _setup_file_watcher(self) -> None:
+        """设置文件系统监视器，自动刷新文件树"""
+        self._file_watcher = QFileSystemWatcher(self)
+        self._file_watcher.directoryChanged.connect(self._on_directory_changed)
+        logger.debug("[LeftPanel] 文件监视器已初始化")
+
+    def _on_directory_changed(self, path: str) -> None:
+        """目录变化时自动刷新文件树"""
+        logger.info(f"[LeftPanel] 检测到目录变化: {path}")
+        if self._project_path:
+            self.load_project_tree(self._project_path)
+
     def _on_item_double_clicked(self, item, column):
         """处理双击事件 — 打开文件"""
         file_path = item.data(0, Qt.ItemDataRole.UserRole)
@@ -108,6 +123,11 @@ class LeftPanel(BaseWidget):
         if not root.exists():
             logger.error(f"[LeftPanel] 项目路径不存在: {project_path}")
             return
+
+        # 保存项目路径并添加文件监视
+        self._project_path = project_path
+        self._file_watcher.addPath(project_path)
+        logger.debug(f"[LeftPanel] 添加文件监视: {project_path}")
 
         project_name = root.name
         logger.info(f"[LeftPanel] 加载项目树: {project_name} ({root})")
