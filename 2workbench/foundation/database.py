@@ -150,17 +150,21 @@ def init_db(
 
             # 检查 worlds 表是否存在（判断是否需要初始化）
             table_check = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='worlds'").fetchone()
-            needs_init = table_check is None or current_version < SCHEMA_VERSION
+            needs_init = table_check is None
+            needs_migration = not needs_init and current_version < SCHEMA_VERSION
 
-            if not needs_init:
+            if not needs_init and not needs_migration:
                 logger.info(f"数据库已是最新版本 (v{current_version})")
                 return True
 
-            # 执行 schema
+            # 执行 schema（使用 IF NOT EXISTS 避免重复创建错误）
             if schema_path.exists():
                 sql = schema_path.read_text(encoding="utf-8")
                 db.executescript(sql)
-                logger.info(f"数据库 schema 已执行: {schema_path}")
+                if needs_migration:
+                    logger.info(f"数据库 schema 已更新 (v{current_version} -> v{SCHEMA_VERSION})")
+                else:
+                    logger.info(f"数据库 schema 已执行: {schema_path}")
             else:
                 # 内存数据库模式下 schema 不存在是正常情况，不报错
                 if is_memory_db:

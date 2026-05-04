@@ -26,6 +26,7 @@ from core.models.entities import (
     Quest, QuestStep,
     Memory, GameLog, GameMessage,
     PromptVersion, LLMCallRecord,
+    EventType,
 )
 
 logger = get_logger(__name__)
@@ -108,7 +109,11 @@ class WorldRepo(BaseRepository):
 class LocationRepo(BaseRepository):
     """地点仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def create(self, world_id: int, name: str, description: str = "", connections: dict | None = None, db_path: str | None = None) -> Location:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute(
                 "INSERT INTO locations (world_id, name, description, connections) VALUES (?, ?, ?, ?)",
@@ -118,11 +123,13 @@ class LocationRepo(BaseRepository):
             return self._row_to_location(row)
 
     def get_by_id(self, location_id: int, db_path: str | None = None) -> Location | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM locations WHERE id = ?", (location_id,)).fetchone()
             return self._row_to_location(row) if row else None
 
     def get_by_world(self, world_id: int, db_path: str | None = None) -> list[Location]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM locations WHERE world_id = ?", (world_id,)).fetchall()
             return [self._row_to_location(r) for r in rows]
@@ -136,6 +143,7 @@ class LocationRepo(BaseRepository):
         return Location(**d)
 
     def update(self, location_id: int, db_path: str | None = None, **kwargs) -> Location | None:
+        db_path = db_path or self._db_path
         if "connections" in kwargs and isinstance(kwargs["connections"], dict):
             kwargs["connections"] = self._json_dumps(kwargs["connections"])
         if not kwargs:
@@ -148,6 +156,7 @@ class LocationRepo(BaseRepository):
 
     def delete(self, location_id: int, db_path: str | None = None) -> bool:
         """删除地点"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute("DELETE FROM locations WHERE id = ?", (location_id,))
             return cursor.rowcount > 0
@@ -199,14 +208,41 @@ class PlayerRepo(BaseRepository):
         db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute(
-                """SELECT pi.*, i.name as item_name, i.item_type, i.rarity, i.stats, i.description
+                """SELECT pi.*, i.name, i.item_type, i.rarity, i.stats, i.description,
+                          i.slot, i.level_req, i.stackable, i.usable
                    FROM player_items pi
                    JOIN items i ON pi.item_id = i.id
                    WHERE pi.player_id = ?
                    ORDER BY pi.equipped DESC, i.name""",
                 (player_id,),
             ).fetchall()
-            return [PlayerItem(**self._row_to_dict(r)) for r in rows]
+            result = []
+            for row in rows:
+                row_dict = self._row_to_dict(row)
+                # 构建 Item 对象
+                item_data = {
+                    "id": row_dict.get("item_id", 0),
+                    "name": row_dict.get("name", ""),
+                    "item_type": row_dict.get("item_type", "misc"),
+                    "rarity": row_dict.get("rarity", "common"),
+                    "slot": row_dict.get("slot", ""),
+                    "stats": self._json_loads(row_dict.get("stats"), {}),
+                    "description": row_dict.get("description", ""),
+                    "level_req": row_dict.get("level_req", 1),
+                    "stackable": row_dict.get("stackable", False),
+                    "usable": row_dict.get("usable", False),
+                }
+                # 构建 PlayerItem 对象
+                player_item_data = {
+                    "id": row_dict.get("id", 0),
+                    "player_id": row_dict.get("player_id", 0),
+                    "item_id": row_dict.get("item_id", 0),
+                    "quantity": row_dict.get("quantity", 1),
+                    "equipped": row_dict.get("equipped", False),
+                    "item": Item(**item_data),
+                }
+                result.append(PlayerItem(**player_item_data))
+            return result
 
     def add_item(self, player_id: int, item_id: int, quantity: int = 1, db_path: str | None = None) -> bool:
         db_path = db_path or self._db_path
@@ -239,7 +275,11 @@ class PlayerRepo(BaseRepository):
 class NPCRepo(BaseRepository):
     """NPC 仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def create(self, world_id: int, name: str, location_id: int = 0, db_path: str | None = None, **kwargs) -> NPC:
+        db_path = db_path or self._db_path
         defaults = {"personality": {}, "backstory": "", "mood": "neutral", "goals": [], "relationships": {}, "speech_style": ""}
         defaults.update(kwargs)
         # 序列化 JSON 字段
@@ -255,21 +295,25 @@ class NPCRepo(BaseRepository):
             return self._row_to_npc(row)
 
     def get_by_id(self, npc_id: int, db_path: str | None = None) -> NPC | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM npcs WHERE id = ?", (npc_id,)).fetchone()
             return self._row_to_npc(row) if row else None
 
     def get_by_location(self, location_id: int, db_path: str | None = None) -> list[NPC]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM npcs WHERE location_id = ?", (location_id,)).fetchall()
             return [self._row_to_npc(r) for r in rows]
 
     def get_by_world(self, world_id: int, db_path: str | None = None) -> list[NPC]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM npcs WHERE world_id = ?", (world_id,)).fetchall()
             return [self._row_to_npc(r) for r in rows]
 
     def update(self, npc_id: int, db_path: str | None = None, **kwargs) -> NPC | None:
+        db_path = db_path or self._db_path
         for key in ("personality", "goals", "relationships"):
             if key in kwargs and isinstance(kwargs[key], (dict, list)):
                 kwargs[key] = self._json_dumps(kwargs[key])
@@ -283,6 +327,7 @@ class NPCRepo(BaseRepository):
 
     def delete(self, npc_id: int, db_path: str | None = None) -> bool:
         """删除 NPC"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute("DELETE FROM npcs WHERE id = ?", (npc_id,))
             return cursor.rowcount > 0
@@ -303,7 +348,11 @@ class NPCRepo(BaseRepository):
 class ItemRepo(BaseRepository):
     """道具仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def create(self, name: str, item_type: str = "misc", db_path: str | None = None, **kwargs) -> Item:
+        db_path = db_path or self._db_path
         defaults = {"rarity": "common", "slot": "", "stats": {}, "description": "", "level_req": 1, "stackable": False, "usable": False}
         defaults.update(kwargs)
         if isinstance(defaults.get("stats"), dict):
@@ -317,17 +366,20 @@ class ItemRepo(BaseRepository):
             return self._row_to_item(row)
 
     def get_by_id(self, item_id: int, db_path: str | None = None) -> Item | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
             return self._row_to_item(row) if row else None
 
     def search(self, name: str, db_path: str | None = None) -> list[Item]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM items WHERE name LIKE ?", (f"%{name}%",)).fetchall()
             return [self._row_to_item(r) for r in rows]
 
     def update(self, item_id: int, db_path: str | None = None, **kwargs) -> Item | None:
         """更新道具"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             item = self.get_by_id(item_id, db_path)
             if not item:
@@ -346,12 +398,14 @@ class ItemRepo(BaseRepository):
 
     def delete(self, item_id: int, db_path: str | None = None) -> bool:
         """删除道具"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute("DELETE FROM items WHERE id = ?", (item_id,))
             return cursor.rowcount > 0
 
     def list_all(self, db_path: str | None = None) -> list[Item]:
         """列出所有道具"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM items ORDER BY id").fetchall()
             return [self._row_to_item(r) for r in rows]
@@ -369,7 +423,11 @@ class ItemRepo(BaseRepository):
 class QuestRepo(BaseRepository):
     """任务仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def create(self, world_id: int, title: str, db_path: str | None = None, **kwargs) -> Quest:
+        db_path = db_path or self._db_path
         defaults = {"description": "", "quest_type": "side", "status": "not_started", "rewards": {}, "prerequisites": {}, "branches": {}}
         defaults.update(kwargs)
         for key in ("rewards", "prerequisites", "branches"):
@@ -384,21 +442,25 @@ class QuestRepo(BaseRepository):
             return self._row_to_quest(row)
 
     def get_by_id(self, quest_id: int, db_path: str | None = None) -> Quest | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute("SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
             return self._row_to_quest(row) if row else None
 
     def get_by_player(self, player_id: int, db_path: str | None = None) -> list[Quest]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM quests WHERE player_id = ?", (player_id,)).fetchall()
             return [self._row_to_quest(r) for r in rows]
 
     def list_all(self, db_path: str | None = None) -> list[Quest]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute("SELECT * FROM quests ORDER BY created_at DESC").fetchall()
             return [self._row_to_quest(r) for r in rows]
 
     def update_status(self, quest_id: int, status: str, db_path: str | None = None) -> bool:
+        db_path = db_path or self._db_path
         if status not in ("active", "completed", "failed", "not_started", "abandoned"):
             return False
         with get_db(db_path) as db:
@@ -407,6 +469,7 @@ class QuestRepo(BaseRepository):
 
     def delete(self, quest_id: int, db_path: str | None = None) -> bool:
         """删除任务及其步骤"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             db.execute("DELETE FROM quest_steps WHERE quest_id = ?", (quest_id,))
             cursor = db.execute("DELETE FROM quests WHERE id = ?", (quest_id,))
@@ -414,6 +477,7 @@ class QuestRepo(BaseRepository):
 
     def update(self, quest_id: int, db_path: str | None = None, **kwargs) -> Quest | None:
         """通用更新任务"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             quest = self.get_by_id(quest_id, db_path)
             if not quest:
@@ -448,6 +512,9 @@ class MemoryRepo(BaseRepository):
     支持记忆压缩（保留最重要的 N 条）。
     """
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def store(
         self,
         world_id: int,
@@ -462,6 +529,7 @@ class MemoryRepo(BaseRepository):
         db_path: str | None = None,
     ) -> Memory:
         """存储记忆"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute(
                 """INSERT INTO memories
@@ -483,6 +551,7 @@ class MemoryRepo(BaseRepository):
         db_path: str | None = None,
     ) -> list[Memory]:
         """检索记忆（按重要性 + 时间排序）"""
+        db_path = db_path or self._db_path
         conditions = ["world_id = ?"]
         params: list[Any] = [world_id]
         if category:
@@ -511,6 +580,7 @@ class MemoryRepo(BaseRepository):
         self, world_id: int, tags: list[str], limit: int = 20, db_path: str | None = None,
     ) -> list[Memory]:
         """按标签搜索记忆"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             conditions = " OR ".join(f"tags LIKE ?" for _ in tags)
             params = [f"%{t}%" for t in tags] + [world_id, limit]
@@ -524,6 +594,7 @@ class MemoryRepo(BaseRepository):
 
     def update_reference(self, memory_id: int, turn: int = 0, db_path: str | None = None) -> bool:
         """更新引用计数和最后引用回合"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             db.execute(
                 """UPDATE memories SET
@@ -537,6 +608,7 @@ class MemoryRepo(BaseRepository):
 
     def compress(self, world_id: int, keep_count: int = 50, db_path: str | None = None) -> int:
         """记忆压缩 — 保留最重要的 N 条，标记其余为已压缩"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             # 获取总记忆数
             total = db.execute("SELECT COUNT(*) as cnt FROM memories WHERE world_id = ? AND compressed = 0", (world_id,)).fetchone()["cnt"]
@@ -560,6 +632,7 @@ class MemoryRepo(BaseRepository):
 
     def forget(self, memory_id: int, db_path: str | None = None) -> bool:
         """删除记忆"""
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
             return cursor.rowcount > 0
@@ -578,9 +651,13 @@ class MemoryRepo(BaseRepository):
 class LogRepo(BaseRepository):
     """日志仓库"""
 
-    VALID_EVENT_TYPES = {"dialog", "combat", "quest", "discovery", "system", "death", "trade"}
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
+    VALID_EVENT_TYPES = {e.value for e in EventType}
 
     def log(self, world_id: int, event_type: str, content: str, db_path: str | None = None) -> int:
+        db_path = db_path or self._db_path
         if event_type not in self.VALID_EVENT_TYPES:
             event_type = "system"
         with get_db(db_path) as db:
@@ -591,6 +668,7 @@ class LogRepo(BaseRepository):
             return cursor.lastrowid
 
     def get_recent(self, world_id: int, limit: int = 50, db_path: str | None = None) -> list[GameLog]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute(
                 "SELECT * FROM game_logs WHERE world_id = ? ORDER BY timestamp DESC LIMIT ?",
@@ -604,7 +682,11 @@ class LogRepo(BaseRepository):
 class PromptRepo(BaseRepository):
     """Prompt 版本仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def save(self, prompt_key: str, content: str, description: str = "", db_path: str | None = None) -> PromptVersion:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             # 将旧版本设为非活跃
             db.execute(
@@ -626,6 +708,7 @@ class PromptRepo(BaseRepository):
             return PromptVersion(**self._row_to_dict(row))
 
     def get_active(self, prompt_key: str, db_path: str | None = None) -> PromptVersion | None:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             row = db.execute(
                 "SELECT * FROM prompt_versions WHERE prompt_key = ? AND is_active = 1 ORDER BY version DESC LIMIT 1",
@@ -634,6 +717,7 @@ class PromptRepo(BaseRepository):
             return PromptVersion(**self._row_to_dict(row)) if row else None
 
     def get_history(self, prompt_key: str, db_path: str | None = None) -> list[PromptVersion]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             rows = db.execute(
                 "SELECT * FROM prompt_versions WHERE prompt_key = ? ORDER BY version DESC",
@@ -642,6 +726,7 @@ class PromptRepo(BaseRepository):
             return [PromptVersion(**self._row_to_dict(r)) for r in rows]
 
     def rollback(self, prompt_key: str, version: int, db_path: str | None = None) -> bool:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             db.execute("UPDATE prompt_versions SET is_active = 0 WHERE prompt_key = ?", (prompt_key,))
             db.execute(
@@ -656,9 +741,13 @@ class PromptRepo(BaseRepository):
 class MetricsRepo(BaseRepository):
     """LLM 指标仓库"""
 
+    def __init__(self, db_path: str | None = None):
+        self._db_path = db_path
+
     def record(self, world_id: int, call_type: str, prompt_tokens: int, completion_tokens: int,
                latency_ms: int, model: str = "", tool_calls_count: int = 0,
                tool_names: list[str] | None = None, error: str = "", db_path: str | None = None) -> int:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             cursor = db.execute(
                 """INSERT INTO llm_calls
@@ -672,6 +761,7 @@ class MetricsRepo(BaseRepository):
             return cursor.lastrowid
 
     def get_stats(self, world_id: int = 0, db_path: str | None = None) -> dict[str, Any]:
+        db_path = db_path or self._db_path
         with get_db(db_path) as db:
             if world_id:
                 row = db.execute(

@@ -26,11 +26,24 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _get_version() -> str:
+    """从 pyproject.toml 获取版本号"""
+    try:
+        import tomllib
+        pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+            return data.get("project", {}).get("version", "0.1.0")
+    except Exception:
+        return "0.1.0"
+
+
 def parse_args():
     """解析命令行参数"""
+    version = _get_version()
     parser = argparse.ArgumentParser(description="Game Master Agent IDE")
     parser.add_argument("--project", "-p", help="直接打开指定项目路径")
-    parser.add_argument("--version", "-v", action="version", version="GMA IDE v2.0.0")
+    parser.add_argument("--version", "-v", action="version", version=f"GMA IDE v{version}")
     parser.add_argument("--no-gui", action="store_true", help="无头模式（仅测试）")
     parser.add_argument("--theme", "-t", choices=["dark", "light"], default="dark", help="主题模式 (默认: dark)")
     parser.add_argument("--port", type=int, default=18080, help="HTTP 服务器端口 (默认: 18080)")

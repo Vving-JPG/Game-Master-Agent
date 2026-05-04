@@ -17,7 +17,13 @@ dependencies = [
     # LangGraph 依赖
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
+    # 其他运行时依赖
+    "Pillow>=10.0.0",
+    "python-dotenv>=1.0.0",
 ]
+
+[project.optional-dependencies]
+windows = ["comtypes>=1.1.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -192,8 +192,8 @@ class EventBus:
             if sub.filter_fn and not sub.filter_fn(event):
                 continue
 
-            # 来源过滤（不处理自己发出的事件）
-            if event.source and event.target and event.source != event.target:
+            # 目标过滤：当事件有 target 时，只处理 target 匹配的订阅者
+            if event.target and sub.handler.__qualname__ != event.target:
                 continue
 
             try:
@@ -236,7 +236,8 @@ class EventBus:
         for sub in matched:
             if sub.filter_fn and not sub.filter_fn(event):
                 continue
-            if event.source and event.target and event.source != event.target:
+            # 目标过滤：当事件有 target 时，只处理 target 匹配的订阅者
+            if event.target and sub.handler.__qualname__ != event.target:
                 continue
 
             try:

@@ -1314,28 +1314,52 @@ class MainWindow(QMainWindow):
         class AgentThread(QThread):
             finished = pyqtSignal(dict)
             error = pyqtSignal(str)
+            stopped = pyqtSignal()
 
             def __init__(self, agent, user_input):
                 super().__init__()
                 self.agent = agent
                 self.user_input = user_input
+                self._should_stop = False
+
+            def stop(self):
+                """请求停止线程（协作式取消）"""
+                self._should_stop = True
+                self.requestInterruption()
 
             def run(self):
                 try:
                     # 使用 asyncio 运行异步方法
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    result = loop.run_until_complete(
-                        self.agent.run(self.user_input)
-                    )
+
+                    # 创建任务并定期检查取消标志
+                    task = loop.create_task(self.agent.run(self.user_input))
+
+                    # 定期检查是否请求停止
+                    while not task.done() and not self._should_stop:
+                        loop.run_until_complete(asyncio.sleep(0.1))
+
+                    if self._should_stop:
+                        task.cancel()
+                        try:
+                            loop.run_until_complete(task)
+                        except asyncio.CancelledError:
+                            pass
+                        self.stopped.emit()
+                    else:
+                        result = task.result()
+                        self.finished.emit(result)
+
                     loop.close()
-                    self.finished.emit(result)
                 except Exception as e:
-                    self.error.emit(str(e))
+                    if not self._should_stop:
+                        self.error.emit(str(e))
 
         self._agent_thread = AgentThread(self._current_agent, user_input)
         self._agent_thread.finished.connect(self._on_agent_finished)
         self._agent_thread.error.connect(self._on_agent_error)
+        self._agent_thread.stopped.connect(self._on_agent_stopped)
         self._agent_thread.start()
 
     def _on_agent_finished(self, result: dict) -> None:
@@ -1373,14 +1397,23 @@ class MainWindow(QMainWindow):
     def _on_stop_agent(self) -> None:
         """停止 Agent"""
         if hasattr(self, '_agent_thread') and self._agent_thread.isRunning():
-            self._agent_thread.terminate()
-            self._agent_thread.wait()
-            # 手动恢复按钮状态（terminate 不触发 finished 信号）
-            self._run_action.setEnabled(True)
-            self._stop_action.setEnabled(False)
-            self._show_message("Agent 已停止")
+            # 使用协作式取消而非 terminate()
+            self._agent_thread.stop()
+            # 等待线程结束（带超时）
+            if not self._agent_thread.wait(5000):  # 等待最多5秒
+                # 超时后作为最后手段使用 terminate
+                self._agent_thread.terminate()
+                self._agent_thread.wait()
+            # 按钮状态在 stopped 信号中恢复
         else:
             self._show_message("Agent 未在运行")
+
+    def _on_agent_stopped(self) -> None:
+        """Agent 被停止回调"""
+        # 恢复按钮状态
+        self._run_action.setEnabled(True)
+        self._stop_action.setEnabled(False)
+        self._show_message("Agent 已停止")
 
     def _show_ops_panel(self, panel_type: str) -> None:
         """显示运营工具面板"""

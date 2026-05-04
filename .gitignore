@@ -10,6 +10,14 @@ build/
 # 环境和密钥
 .env
 *.db
+config/config.json
+config.json
+data/custom_models.json
+custom_models.json
+*.key
+*.secret
+**/config/config.json
+**/data/custom_models.json
 
 # IDE
 .idea/

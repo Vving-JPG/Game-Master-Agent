@@ -4,11 +4,13 @@
 1. 泛化为通用缓存（不限于 LLM）
 2. 支持按前缀批量失效
 3. 支持缓存统计
+4. 线程安全（使用 threading.Lock）
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -56,6 +58,7 @@ class LRUCache:
         self._cache: OrderedDict[str, CacheEntry] = OrderedDict()
         self._hits = 0
         self._misses = 0
+        self._lock = threading.Lock()
 
     def _make_key(self, key: str, **kwargs) -> str:
         """生成缓存键（支持附加参数）"""
@@ -67,50 +70,53 @@ class LRUCache:
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取缓存值"""
-        entry = self._cache.get(key)
-        if entry is None:
-            self._misses += 1
-            return default
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry is None:
+                self._misses += 1
+                return default
 
-        # 检查 TTL
-        if entry.ttl > 0 and (time.time() - entry.created_at) > entry.ttl:
-            del self._cache[key]
-            self._misses += 1
-            return default
+            # 检查 TTL
+            if entry.ttl > 0 and (time.time() - entry.created_at) > entry.ttl:
+                del self._cache[key]
+                self._misses += 1
+                return default
 
-        # LRU: 移到末尾
-        self._cache.move_to_end(key)
-        entry.accessed_at = time.time()
-        entry.access_count += 1
-        self._hits += 1
-        return entry.value
+            # LRU: 移到末尾
+            self._cache.move_to_end(key)
+            entry.accessed_at = time.time()
+            entry.access_count += 1
+            self._hits += 1
+            return entry.value
 
     def set(self, key: str, value: Any, ttl: float | None = None) -> None:
         """设置缓存值"""
-        now = time.time()
+        with self._lock:
+            now = time.time()
 
-        # 如果已存在，先删除（更新 TTL 和位置）
-        if key in self._cache:
-            del self._cache[key]
+            # 如果已存在，先删除（更新 TTL 和位置）
+            if key in self._cache:
+                del self._cache[key]
 
-        self._cache[key] = CacheEntry(
-            key=key,
-            value=value,
-            created_at=now,
-            accessed_at=now,
-            ttl=ttl if ttl is not None else self._default_ttl,
-        )
+            self._cache[key] = CacheEntry(
+                key=key,
+                value=value,
+                created_at=now,
+                accessed_at=now,
+                ttl=ttl if ttl is not None else self._default_ttl,
+            )
 
-        # 淘汰最旧条目
-        while len(self._cache) > self._max_size:
-            self._cache.popitem(last=False)
+            # 淘汰最旧条目
+            while len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)
 
     def delete(self, key: str) -> bool:
         """删除缓存值"""
-        if key in self._cache:
-            del self._cache[key]
-            return True
-        return False
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+                return True
+            return False
 
     def invalidate_prefix(self, prefix: str) -> int:
         """按前缀批量失效
@@ -121,30 +127,33 @@ class LRUCache:
         Returns:
             失效的条目数
         """
-        keys_to_delete = [k for k in self._cache if k.startswith(prefix)]
-        for key in keys_to_delete:
-            del self._cache[key]
-        if keys_to_delete:
-            logger.debug(f"缓存失效: prefix={prefix}, count={len(keys_to_delete)}")
-        return len(keys_to_delete)
+        with self._lock:
+            keys_to_delete = [k for k in self._cache if k.startswith(prefix)]
+            for key in keys_to_delete:
+                del self._cache[key]
+            if keys_to_delete:
+                logger.debug(f"缓存失效: prefix={prefix}, count={len(keys_to_delete)}")
+            return len(keys_to_delete)
 
     def clear(self) -> None:
         """清空缓存"""
-        self._cache.clear()
-        self._hits = 0
-        self._misses = 0
+        with self._lock:
+            self._cache.clear()
+            self._hits = 0
+            self._misses = 0
         logger.debug("缓存已清空")
 
     def get_stats(self) -> dict[str, Any]:
         """获取缓存统计"""
-        total = self._hits + self._misses
-        return {
-            "size": len(self._cache),
-            "max_size": self._max_size,
-            "hits": self._hits,
-            "misses": self._misses,
-            "hit_rate": f"{(self._hits / total * 100):.1f}%" if total > 0 else "N/A",
-        }
+        with self._lock:
+            total = self._hits + self._misses
+            return {
+                "size": len(self._cache),
+                "max_size": self._max_size,
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": f"{(self._hits / total * 100):.1f}%" if total > 0 else "N/A",
+            }
 
 
 # 全局实例

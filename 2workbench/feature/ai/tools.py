@@ -54,6 +54,17 @@ def get_tool_context() -> ToolContext | None:
     return _tool_context
 
 
+def _get_world_id() -> int:
+    """从工具上下文获取 world_id，默认为 1"""
+    ctx = get_tool_context()
+    if ctx and ctx.world_id:
+        try:
+            return int(ctx.world_id)
+        except (ValueError, TypeError):
+            return 1
+    return 1
+
+
 # === 工具注册表 ===
 _REGISTERED_TOOLS: dict[str, dict] = {}
 
@@ -500,12 +511,13 @@ def create_npc(name: str, location_name: str = "", personality: str = "neutral",
     try:
         db_path = _get_db_path()
         repo = NPCRepo()
+        world_id = _get_world_id()
 
         # 如果指定了地点，查找地点 ID
         location_id = 0
         if location_name:
             loc_repo = LocationRepo()
-            locations = loc_repo.get_by_world(world_id=1, db_path=db_path)
+            locations = loc_repo.get_by_world(world_id=world_id, db_path=db_path)
             for loc in locations:
                 if loc.name == location_name:
                     location_id = loc.id
@@ -515,7 +527,7 @@ def create_npc(name: str, location_name: str = "", personality: str = "neutral",
         goal_list = [g.strip() for g in goals.split(",") if g.strip()] if goals else []
 
         npc = repo.create(
-            world_id=1,
+            world_id=world_id,
             name=name,
             location_id=location_id,
             mood=mood,
@@ -549,8 +561,9 @@ def search_npcs(location_name: str = "", name_keyword: str = "") -> str:
     try:
         db_path = _get_db_path()
         repo = NPCRepo()
+        world_id = _get_world_id()
 
-        npcs = repo.get_by_world(world_id=1, db_path=db_path)
+        npcs = repo.get_by_world(world_id=world_id, db_path=db_path)
 
         results = []
         for npc in npcs:
@@ -589,6 +602,7 @@ def create_location(name: str, description: str = "", connections: str = "") -> 
     try:
         db_path = _get_db_path()
         repo = LocationRepo()
+        world_id = _get_world_id()
 
         # 解析连接
         conn_dict = {}
@@ -600,7 +614,7 @@ def create_location(name: str, description: str = "", connections: str = "") -> 
                     conn_dict[direction.strip()] = int(target_id.strip())
 
         location = repo.create(
-            world_id=1,
+            world_id=world_id,
             name=name,
             description=description,
             connections=conn_dict if conn_dict else None,
@@ -668,9 +682,10 @@ def create_quest(title: str, description: str = "", quest_type: str = "side",
     try:
         db_path = _get_db_path()
         repo = QuestRepo()
+        world_id = _get_world_id()
 
         quest = repo.create(
-            world_id=1,
+            world_id=world_id,
             title=title,
             description=description,
             db_path=db_path
@@ -695,12 +710,13 @@ def get_world_state() -> str:
     """
     try:
         db_path = _get_db_path()
+        world_id = _get_world_id()
 
         parts = []
 
         # 地点
         loc_repo = LocationRepo()
-        locations = loc_repo.get_by_world(world_id=1, db_path=db_path)
+        locations = loc_repo.get_by_world(world_id=world_id, db_path=db_path)
         parts.append(f"=== 地点 ({len(locations)}) ===")
         for loc in locations:
             conn_str = ", ".join([f"{d}:{tid}" for d, tid in (loc.connections or {}).items()]) if loc.connections else "无"
@@ -708,7 +724,7 @@ def get_world_state() -> str:
 
         # NPC
         npc_repo = NPCRepo()
-        npcs = npc_repo.get_by_world(world_id=1, db_path=db_path)
+        npcs = npc_repo.get_by_world(world_id=world_id, db_path=db_path)
         parts.append(f"\n=== NPC ({len(npcs)}) ===")
         for npc in npcs:
             parts.append(f"  [{npc.id}] {npc.name} - 心情:{npc.mood}, 位置ID:{npc.location_id}")
@@ -750,9 +766,10 @@ def update_npc_state(npc_name: str, mood: str = None, location_name: str = None,
     try:
         db_path = _get_db_path()
         repo = NPCRepo()
+        world_id = _get_world_id()
 
         # 查找 NPC
-        npcs = repo.get_by_world(world_id=1, db_path=db_path)
+        npcs = repo.get_by_world(world_id=world_id, db_path=db_path)
         target = None
         for npc in npcs:
             if npc.name == npc_name:
@@ -767,7 +784,7 @@ def update_npc_state(npc_name: str, mood: str = None, location_name: str = None,
             updates["mood"] = mood
         if location_name:
             loc_repo = LocationRepo()
-            locations = loc_repo.get_by_world(world_id=1, db_path=db_path)
+            locations = loc_repo.get_by_world(world_id=world_id, db_path=db_path)
             for loc in locations:
                 if loc.name == location_name:
                     updates["location_id"] = loc.id
