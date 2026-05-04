@@ -1,3 +1,22 @@
+# settings_dialog.py 修复指导文档
+
+> 将 `2workbench/presentation/dialogs/settings_dialog.py` 整体替换为下方代码即可修复全部 5 个问题。
+
+## 修复的问题
+
+| # | 问题 | 修复方式 |
+|---|------|----------|
+| 1 | 设置窗口显示空白 | `refresh()` 改为完全重建 UI，不再用 `deleteLater()` 局部刷新 |
+| 2 | config.json 未更新 | `_sync_to_config()` 适配 `{"providers": {...}}` 格式 |
+| 3 | 配置格式混乱 | 同 provider 多模型不再互相覆盖，自定义数据独立存 `custom_models.json` |
+| 4 | 界面布局空白 | 紧凑布局，标题+按钮同行，行高 36px |
+| 5 | 编辑数据未填充 | 移除无用参数，`_on_edit` 直接通过 `model_id` 查找并传递 `edit_data` |
+
+## 完整替换代码
+
+将 `settings_dialog.py` 全部内容替换为：
+
+```python
 """设置对话框 — Trae 风格模型管理
 
 主界面为模型列表，点击"+ 添加模型"弹出添加表单。
@@ -21,9 +40,7 @@ from presentation.theme.manager import theme_manager
 
 logger = get_logger(__name__)
 
-# 相对于项目目录的路径
-CUSTOM_MODELS_FILE = Path("data/custom_models.json")
-CONFIG_FILE = Path("config/config.json")
+CUSTOM_MODELS_FILE = Path("./data/custom_models.json")
 
 
 class AddModelDialog(QDialog):
@@ -372,44 +389,20 @@ class ModelListWidget(QWidget):
         self.updateGeometry()
 
     # ============================================================ 持久化
-    def _get_project_path(self) -> Path | None:
-        """获取当前项目路径"""
-        try:
-            from presentation.project.manager import project_manager
-            return project_manager.project_path
-        except Exception:
-            return None
-
     def _load_custom_models(self) -> None:
-        """从项目目录加载自定义模型"""
-        project_path = self._get_project_path()
-        if not project_path:
-            self._custom_models = []
-            return
-        
-        models_file = Path(project_path) / CUSTOM_MODELS_FILE
-        if models_file.exists():
+        if CUSTOM_MODELS_FILE.exists():
             try:
                 self._custom_models = json.loads(
-                    models_file.read_text(encoding="utf-8")
+                    CUSTOM_MODELS_FILE.read_text(encoding="utf-8")
                 )
             except Exception as e:
                 logger.warning(f"加载自定义模型失败: {e}")
                 self._custom_models = []
-        else:
-            self._custom_models = []
 
     def _save(self) -> None:
-        """保存自定义模型到项目目录"""
-        project_path = self._get_project_path()
-        if not project_path:
-            logger.warning("没有打开项目，无法保存模型配置")
-            return
-        
-        models_file = Path(project_path) / CUSTOM_MODELS_FILE
-        models_file.parent.mkdir(parents=True, exist_ok=True)
+        CUSTOM_MODELS_FILE.parent.mkdir(parents=True, exist_ok=True)
         try:
-            models_file.write_text(
+            CUSTOM_MODELS_FILE.write_text(
                 json.dumps(self._custom_models, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
@@ -417,14 +410,9 @@ class ModelListWidget(QWidget):
             logger.error(f"保存自定义模型失败: {e}")
 
     def _sync_to_config(self) -> None:
-        """同步到项目目录的 config/config.json"""
+        """同步到 config/config.json，格式: {"providers": {"deepseek": {...}}}"""
         try:
-            project_path = self._get_project_path()
-            if not project_path:
-                logger.warning("没有打开项目，无法同步配置")
-                return
-            
-            config_file = Path(project_path) / CONFIG_FILE
+            config_file = Path("./config/config.json")
 
             config: Dict[str, Any] = {}
             if config_file.exists():
@@ -589,3 +577,15 @@ class SettingsDialog(QDialog):
                 border-radius: 8px;
             }}
         """)
+```
+
+## 验收标准
+
+- [ ] 打开设置窗口，内容正常显示（不空白）
+- [ ] 点击"+ 添加模型"弹出对话框，填写模型名和 API Key 后点"添加"
+- [ ] 添加后模型立即出现在列表中
+- [ ] 点击"配置"弹出编辑对话框，数据已正确填充
+- [ ] 编辑保存后列表更新
+- [ ] 点击"删除"有确认弹窗，确认后从列表移除
+- [ ] `config/config.json` 格式为 `{"providers": {"deepseek": {...}}}`
+- [ ] `data/custom_models.json` 保存了完整的自定义模型数据
