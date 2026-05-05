@@ -30,14 +30,22 @@ class ToolContext:
 _tool_context = threading.local()
 
 
+def _init_tool_context():
+    """初始化线程本地存储的默认值"""
+    if not hasattr(_tool_context, 'context'):
+        _tool_context.context = None
+
+
 def set_tool_context(ctx: ToolContext | None):
     """设置当前工具上下文"""
+    _init_tool_context()
     _tool_context.context = ctx
 
 
 def get_tool_context() -> ToolContext | None:
     """获取当前工具上下文"""
-    return getattr(_tool_context, 'context', None)
+    _init_tool_context()
+    return _tool_context.context
 
 
 def _get_db_path() -> str:

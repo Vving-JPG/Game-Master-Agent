@@ -99,28 +99,44 @@ async def node_build_prompt(state: AgentState, config: RunnableConfig | None = N
         try:
             from langgraph.config import get_store
             store = get_store(config)
-
             world_id = state.get("world_id", "1")
+        except Exception as e:
+            logger.warning(f"初始化 Store 失败: {e}")
+            store = None
+
+        if store:
+            player_prefs = []
+            world_state = []
+            story_events = []
 
             # 获取玩家偏好（跨会话）
-            player_prefs = store.search(
-                (world_id, "player_preferences"),
-                query=event_text,
-                limit=3,
-            )
+            try:
+                player_prefs = store.search(
+                    (world_id, "player_preferences"),
+                    query=event_text,
+                    limit=3,
+                )
+            except Exception as e:
+                logger.warning(f"加载玩家偏好失败: {e}")
 
             # 获取世界状态
-            world_state = store.search(
-                (world_id, "world_state"),
-                limit=3,
-            )
+            try:
+                world_state = store.search(
+                    (world_id, "world_state"),
+                    limit=3,
+                )
+            except Exception as e:
+                logger.warning(f"加载世界状态失败: {e}")
 
             # 获取相关故事事件（语义检索）
-            story_events = store.search(
-                (world_id, "story_events"),
-                query=event_text,
-                limit=5,
-            )
+            try:
+                story_events = store.search(
+                    (world_id, "story_events"),
+                    query=event_text,
+                    limit=5,
+                )
+            except Exception as e:
+                logger.warning(f"加载故事事件失败: {e}")
 
             # 构建记忆上下文
             memory_parts = []
@@ -140,8 +156,6 @@ async def node_build_prompt(state: AgentState, config: RunnableConfig | None = N
             if memory_parts:
                 memory_context = "\n\n".join(memory_parts)
                 logger.debug(f"已加载长期记忆: {len(player_prefs)} 偏好, {len(world_state)} 世界状态, {len(story_events)} 事件")
-        except Exception as e:
-            logger.warning(f"加载长期记忆失败: {e}")
 
     # 获取 Skill 内容
     skill_contents = []
