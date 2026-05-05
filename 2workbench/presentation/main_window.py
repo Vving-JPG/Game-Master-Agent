@@ -228,6 +228,7 @@ class CenterPanel(BaseWidget):
         # Note: _graph_viewer 已移除，使用 LangGraph Studio 替代（运行: langgraph dev）
         self._prompt_manager = None    # 提示词管理器
         self._skill_manager = None     # Skill 管理器
+        self._ai_assistant_panel = None  # AI 助手面板
         self._runtime_panel = None     # 运行控制台
         self._event_monitor = None     # 事件监视
         self._log_viewer = None        # 日志查看
@@ -278,6 +279,8 @@ class CenterPanel(BaseWidget):
             self._prompt_manager = None
         elif widget == self._skill_manager:
             self._skill_manager = None
+        elif widget == self._ai_assistant_panel:
+            self._ai_assistant_panel = None
         elif widget == self._runtime_panel:
             self._runtime_panel = None
         elif widget == self._event_monitor:
@@ -359,6 +362,15 @@ class CenterPanel(BaseWidget):
         idx = self.tab_widget.indexOf(self._log_viewer)
         self.tab_widget.setCurrentIndex(idx)
 
+    def show_ai_assistant(self) -> None:
+        """显示 AI 助手面板"""
+        from presentation.editor.ai_assistant import AIAssistantPanel
+        if self._ai_assistant_panel is None:
+            self._ai_assistant_panel = AIAssistantPanel()
+            self.tab_widget.addTab(self._ai_assistant_panel, "🤖 AI 助手")
+        idx = self.tab_widget.indexOf(self._ai_assistant_panel)
+        self.tab_widget.setCurrentIndex(idx)
+
 
 class MainWindow(QMainWindow):
     """主窗口"""
@@ -388,6 +400,10 @@ class MainWindow(QMainWindow):
 
         # 如果已有打开的项目，自动加载到编辑器
         self._load_current_project_if_exists()
+
+        # 初始化 AI 助手服务
+        from feature.services.ai_assistant import ai_assistant_service
+        ai_assistant_service.initialize()
 
         # 启动 HTTP 控制服务器
         self._start_http_server()
@@ -670,6 +686,13 @@ class MainWindow(QMainWindow):
         stop_action.setShortcut("Shift+F5")
         stop_action.triggered.connect(self._on_stop_agent)
         agent_menu.addAction(stop_action)
+
+        # AI 助手菜单项
+        agent_menu.addSeparator()
+        ai_assistant_action = QAction("🤖 AI 助手", self)
+        ai_assistant_action.setShortcut("Ctrl+Shift+A")
+        ai_assistant_action.triggered.connect(self._on_open_ai_assistant)
+        agent_menu.addAction(ai_assistant_action)
 
         # Tools 菜单（管理器改造后简化）
         tools_menu = menubar.addMenu("工具(&T)")
@@ -1214,6 +1237,10 @@ class MainWindow(QMainWindow):
             # 按钮状态在 stopped 信号中恢复
         else:
             self._show_message("Agent 未在运行")
+
+    def _on_open_ai_assistant(self) -> None:
+        """切换到 AI 助手标签页"""
+        self.center_panel.show_ai_assistant()
 
     def _on_agent_stopped(self) -> None:
         """Agent 被停止回调"""

@@ -95,14 +95,15 @@ async def node_build_prompt(state: AgentState, config: RunnableConfig | None = N
 
     # ===== 从 Store 获取长期记忆 =====
     memory_context = ""
+    world_id = state.get("world_id", "1")
+    store = None
     if config:
         try:
             from langgraph.config import get_store
             store = get_store(config)
-            world_id = state.get("world_id", "1")
         except Exception as e:
             logger.warning(f"初始化 Store 失败: {e}")
-            store = None
+            store = None  # 确保降级为 None，后续代码通过 if store: 判断跳过
 
         if store:
             player_prefs = []
