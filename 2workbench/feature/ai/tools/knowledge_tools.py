@@ -177,6 +177,7 @@ def create_item(name: str, item_type: str = "misc", description: str = "",
             name=name,
             item_type=item_type,
             description=description,
+            rarity=rarity,
             db_path=db_path
         )
 
@@ -213,6 +214,9 @@ def create_quest(title: str, description: str = "", quest_type: str = "side",
             world_id=world_id,
             title=title,
             description=description,
+            quest_type=quest_type,
+            rewards=rewards,
+            prerequisites=prerequisites,
             db_path=db_path
         )
 
@@ -317,6 +321,15 @@ def update_npc_state(npc_name: str, mood: str = None, location_name: str = None,
                     updates["location_id"] = loc.id
                     break
 
+        # 处理目标添加/移除
+        goals = list(target.goals) if target.goals else []
+        if add_goal:
+            goals.append(add_goal)
+            updates["goals"] = goals
+        if remove_goal and remove_goal in goals:
+            goals.remove(remove_goal)
+            updates["goals"] = goals
+
         if updates:
             updated = repo.update(npc.id, db_path=db_path, **updates)
             if updated:
@@ -325,6 +338,10 @@ def update_npc_state(npc_name: str, mood: str = None, location_name: str = None,
                     result += f"，心情 → {mood}"
                 if location_name:
                     result += f"，移动到 {location_name}"
+                if add_goal:
+                    result += f"，添加目标: {add_goal}"
+                if remove_goal:
+                    result += f"，移除目标: {remove_goal}"
                 return result
 
         return f"NPC {npc_name} 无需更新"

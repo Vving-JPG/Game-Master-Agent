@@ -304,8 +304,9 @@ class SkillManagerWidget(BaseWidget):
                 logger.error(f"删除 Skill 文件失败: {e}")
 
         # 从列表中移除
+        deleted_skill = self._current_skill
         del self._skills[self._current_skill]
-        self.skill_saved.emit(self._current_skill)
+        self.skill_deleted.emit(deleted_skill)
         self._current_skill = None
 
         # 刷新列表

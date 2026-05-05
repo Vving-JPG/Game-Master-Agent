@@ -14,7 +14,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from foundation.logger import get_logger
 
@@ -59,14 +59,6 @@ class LRUCache:
         self._hits = 0
         self._misses = 0
         self._lock = threading.Lock()
-
-    def _make_key(self, key: str, **kwargs) -> str:
-        """生成缓存键（支持附加参数）"""
-        if not kwargs:
-            return key
-        raw = json.dumps(kwargs, sort_keys=True, default=str)
-        hash_part = hashlib.md5(raw.encode()).hexdigest()[:8]
-        return f"{key}:{hash_part}"
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取缓存值"""

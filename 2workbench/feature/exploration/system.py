@@ -22,8 +22,8 @@ class ExplorationSystem(BaseFeature):
 
     def _on_command_executed(self, event) -> None:
         """处理 AI 命令"""
-        intent = event.get("intent", "")
-        params = event.get("params", {})
+        intent = event.data.get("intent", "")
+        params = event.data.get("params", {})
 
         if intent == "move_to_location":
             player_id = params.get("player_id", 1)

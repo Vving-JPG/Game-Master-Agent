@@ -181,8 +181,8 @@ class LogViewer(BaseWidget):
                     # 重新添加监控（某些编辑器会创建新文件）
                     if str(self._log_path) not in self._watcher.files():
                         self._watcher.addPath(str(self._log_path))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"日志文件监控异常: {e}")
 
     def append_log(self, level: str, message: str, source: str = "") -> None:
         """追加日志条目"""

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Callable
+from typing import Any, Callable
 from dataclasses import dataclass, asdict
 
 from foundation.logger import get_logger
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 CONFIG_FILE = Path("config.json")
 
 # Provider 配置映射: keyword -> (key, display_name)
-_PROVIDER_MAP: Dict[str, Tuple[str, str]] = {
+_PROVIDER_MAP: dict[str, tuple[str, str]] = {
     "deepseek": ("deepseek", "DeepSeek"),
     "gpt": ("openai", "OpenAI"),
     "openai": ("openai", "OpenAI"),
@@ -43,7 +43,7 @@ def _infer_base_url(model_name: str) -> str:
     return ""
 
 
-def _get_provider_info(model_name: str, provider_key: str | None = None) -> Tuple[str, str]:
+def _get_provider_info(model_name: str, provider_key: str | None = None) -> tuple[str, str]:
     """获取 provider 信息
 
     根据模型名称或 provider key 获取 provider 信息。
@@ -53,7 +53,7 @@ def _get_provider_info(model_name: str, provider_key: str | None = None) -> Tupl
         provider_key: provider key（如果已知，直接获取显示名称）
 
     Returns:
-        Tuple[str, str]: (provider_key, display_name)
+        tuple[str, str]: (provider_key, display_name)
     """
     # 如果提供了 provider_key，直接查找显示名称
     if provider_key is not None:
@@ -86,11 +86,11 @@ class ModelConfig:
         if not self.base_url:
             self.base_url = _infer_base_url(self.model)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ModelConfig:
+    def from_dict(cls, data: dict[str, Any]) -> ModelConfig:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -99,8 +99,8 @@ class ModelManager:
 
     def __init__(self, project_path: Path | None = None):
         self._project_path = project_path
-        self._models: List[ModelConfig] = []
-        self._listeners: List[Callable] = []
+        self._models: list[ModelConfig] = []
+        self._listeners: list[Callable] = []
 
     @property
     def project_path(self) -> Path | None:
@@ -145,7 +145,7 @@ class ModelManager:
 
         try:
             config = json.loads(config_file.read_text(encoding="utf-8"))
-            providers: Dict[str, Any] = {}
+            providers: dict[str, Any] = {}
 
             # 优先从新格式 providers 读取
             if "providers" in config and isinstance(config["providers"], dict):
@@ -191,7 +191,7 @@ class ModelManager:
             return False
 
         try:
-            config: Dict[str, Any] = {}
+            config: dict[str, Any] = {}
             if config_file.exists():
                 try:
                     config = json.loads(config_file.read_text(encoding="utf-8"))
@@ -235,11 +235,11 @@ class ModelManager:
             logger.error(f"保存配置失败: {e}")
             return False
 
-    def get_models(self) -> List[ModelConfig]:
+    def get_models(self) -> list[ModelConfig]:
         """获取所有模型列表"""
         return self._models.copy()
 
-    def get_enabled_models(self) -> List[ModelConfig]:
+    def get_enabled_models(self) -> list[ModelConfig]:
         """获取启用的模型列表"""
         return [m for m in self._models if m.enabled]
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget,
@@ -120,9 +120,9 @@ class ProjectSelector(QDialog):
         self.setMinimumSize(960, 640)
         self.resize(960, 640)
 
-        self._projects: List[Dict[str, Any]] = []
-        self._filtered_projects: List[Dict[str, Any]] = []
-        self._selected_project: Dict[str, Any] | None = None
+        self._projects: list[dict[str, Any]] = []
+        self._filtered_projects: list[dict[str, Any]] = []
+        self._selected_project: dict[str, Any] | None = None
 
         self._setup_ui()
         self._load_projects()
@@ -546,7 +546,7 @@ class ProjectSelector(QDialog):
         self._projects = self._scan_projects()
         self._apply_filter_and_sort()
 
-    def _scan_projects(self) -> List[Dict[str, Any]]:
+    def _scan_projects(self) -> list[dict[str, Any]]:
         """扫描项目目录和最近打开的项目
 
         现在委托给 ProjectManager 处理。

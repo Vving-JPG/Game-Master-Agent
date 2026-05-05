@@ -2,6 +2,7 @@
 """工具上下文 — 让工具能访问数据库"""
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from foundation.config import settings
@@ -26,18 +27,17 @@ class ToolContext:
         return self._repos[repo_class.__name__]
 
 
-_tool_context: ToolContext | None = None
+_tool_context = threading.local()
 
 
 def set_tool_context(ctx: ToolContext | None):
     """设置当前工具上下文"""
-    global _tool_context
-    _tool_context = ctx
+    _tool_context.context = ctx
 
 
 def get_tool_context() -> ToolContext | None:
     """获取当前工具上下文"""
-    return _tool_context
+    return getattr(_tool_context, 'context', None)
 
 
 def _get_db_path() -> str:

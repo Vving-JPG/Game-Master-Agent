@@ -1,0 +1,7 @@
+{
+  "graphs": {
+    "gm_agent": "./2workbench/feature/ai/graph.py:gm_graph"
+  },
+  "dependencies": ["./2workbench"],
+  "env": "./2workbench/.env"
+}

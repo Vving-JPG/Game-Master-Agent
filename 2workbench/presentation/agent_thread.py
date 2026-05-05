@@ -25,13 +25,11 @@ class AgentThread(QThread):
         finished: 运行完成，传递结果字典
         error: 运行出错，传递错误信息
         stopped: 运行被停止
-        stream_chunk: 流式输出片段
     """
 
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
     stopped = pyqtSignal()
-    stream_chunk = pyqtSignal(str)
 
     def __init__(self, agent, user_input: str):
         """初始化

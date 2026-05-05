@@ -16,7 +16,7 @@ from foundation.llm import LLMMessage
 from foundation.llm.model_router import model_router
 from foundation.logger import get_logger
 from feature.base import BaseFeature
-from core.models import NPCRepo, LogRepo, MemoryRepo, NPC, Personality
+from core.models import NPCRepo, NPC, Personality
 
 logger = get_logger(__name__)
 
@@ -41,9 +41,9 @@ class DialogueSystem(BaseFeature):
 
     def _on_command_executed(self, event: Event) -> None:
         """监听对话命令"""
-        intent = event.get("intent", "")
+        intent = event.data.get("intent", "")
         if intent == "npc_talk":
-            self.handle_dialogue(event.get("params", {}))
+            self.handle_dialogue(event.data.get("params", {}))
 
     def build_npc_context(self, npc: NPC, player_relationship: float = 0.0) -> str:
         """构建 NPC 上下文描述

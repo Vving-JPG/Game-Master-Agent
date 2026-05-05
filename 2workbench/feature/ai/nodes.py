@@ -26,6 +26,8 @@ from foundation.llm.model_router import model_router
 from foundation.logger import get_logger
 from core.state import AgentState
 
+from langgraph.types import RunnableConfig
+
 from .events import (
     create_node_event, create_stream_token_event,
     create_error_event, LLM_STREAM_TOKEN, LLM_STREAM_REASONING,
@@ -80,15 +82,66 @@ async def node_handle_event(state: AgentState) -> dict[str, Any]:
     }
 
 
-async def node_build_prompt(state: AgentState) -> dict[str, Any]:
+async def node_build_prompt(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
     """节点 2: 组装 Prompt
 
     调用 PromptBuilder 组装完整的 messages 列表。
+    使用 Store 获取长期记忆（跨会话持久化）。
     """
     event_bus.emit(create_node_event("build_prompt", "started"))
 
     event = state.get("current_event", {})
     event_text = event.get("_formatted_text", event.get("data", {}).get("raw_text", ""))
+
+    # ===== 从 Store 获取长期记忆 =====
+    memory_context = ""
+    if config:
+        try:
+            from langgraph.config import get_store
+            store = get_store(config)
+
+            world_id = state.get("world_id", "1")
+
+            # 获取玩家偏好（跨会话）
+            player_prefs = store.search(
+                (world_id, "player_preferences"),
+                query=event_text,
+                limit=3,
+            )
+
+            # 获取世界状态
+            world_state = store.search(
+                (world_id, "world_state"),
+                limit=3,
+            )
+
+            # 获取相关故事事件（语义检索）
+            story_events = store.search(
+                (world_id, "story_events"),
+                query=event_text,
+                limit=5,
+            )
+
+            # 构建记忆上下文
+            memory_parts = []
+            if player_prefs:
+                memory_parts.append("## 玩家偏好\n" + "\n".join([
+                    f"- {p.value.get('content', '')}" for p in player_prefs
+                ]))
+            if world_state:
+                memory_parts.append("## 世界状态\n" + "\n".join([
+                    f"- {w.value.get('content', '')}" for w in world_state
+                ]))
+            if story_events:
+                memory_parts.append("## 相关故事事件\n" + "\n".join([
+                    f"- {s.value.get('content', '')}" for s in story_events
+                ]))
+
+            if memory_parts:
+                memory_context = "\n\n".join(memory_parts)
+                logger.debug(f"已加载长期记忆: {len(player_prefs)} 偏好, {len(world_state)} 世界状态, {len(story_events)} 事件")
+        except Exception as e:
+            logger.warning(f"加载长期记忆失败: {e}")
 
     # 获取 Skill 内容
     skill_contents = []
@@ -121,11 +174,16 @@ async def node_build_prompt(state: AgentState) -> dict[str, Any]:
                     content = loader.load_activation(skill)
                     if content:
                         skill_contents.append(content)
-        except Exception:
-            pass  # Skill 加载失败不影响主流程
+        except Exception as e:
+            logger.warning(f"Skill 加载失败: {e}")  # Skill 加载失败不影响主流程
 
     # 组装 Prompt
     system_prompt = _get_system_prompt()
+
+    # 如果有长期记忆，注入到 system prompt
+    if memory_context:
+        system_prompt = f"{system_prompt}\n\n# 长期记忆（跨会话信息）\n{memory_context}"
+
     messages = _prompt_builder.build(
         system_prompt=system_prompt,
         state=state,
@@ -292,7 +350,8 @@ async def node_execute_commands(state: AgentState) -> dict[str, Any]:
                         import json
                         try:
                             params = json.loads(params["arguments"])
-                        except Exception:
+                        except Exception as e:
+                            logger.warning(f"工具参数解析失败: {e}")
                             params = {}
                     result = tool.invoke(params)
                     results.append({"intent": intent, "success": True, "result": result})
@@ -329,36 +388,82 @@ async def node_execute_commands(state: AgentState) -> dict[str, Any]:
     }
 
 
-async def node_update_memory(state: AgentState) -> dict[str, Any]:
+async def node_update_memory(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
     """节点 6: 更新记忆
 
-    将记忆更新写入数据库。
+    将记忆更新写入 Store（长期记忆存储）。
+    同时保留对旧 MemoryRepo 的兼容（降级方案）。
     """
     event_bus.emit(create_node_event("update_memory", "started"))
 
     memory_updates = state.get("memory_updates", [])
     stored_count = 0
 
-    world_id = int(state.get("world_id", 0))
+    world_id = state.get("world_id", "1")
     turn = state.get("turn_count", 0)
 
-    if world_id > 0 and memory_updates:
-        from core.models import MemoryRepo
-        repo = MemoryRepo()
-        for mem in memory_updates:
-            try:
-                repo.store(
-                    world_id=world_id,
-                    category=mem.get("category", "session"),
-                    source=mem.get("source", "agent"),
-                    content=mem.get("content", ""),
-                    title=mem.get("title", ""),
-                    importance=mem.get("importance", 0.5),
-                    turn=turn,
-                )
-                stored_count += 1
-            except Exception as e:
-                logger.error(f"记忆存储失败: {e}")
+    # ===== 使用 Store 存储长期记忆 =====
+    if config and memory_updates:
+        try:
+            from langgraph.config import get_store
+            store = get_store(config)
+
+            for mem in memory_updates:
+                try:
+                    category = mem.get("category", "session")
+                    content = mem.get("content", "")
+
+                    # 构建 key
+                    import uuid
+                    key = f"{category}_{turn}_{uuid.uuid4().hex[:8]}"
+
+                    # 构建 value
+                    value = {
+                        "content": content,
+                        "metadata": {
+                            "category": category,
+                            "source": mem.get("source", "agent"),
+                            "title": mem.get("title", ""),
+                            "importance": mem.get("importance", 0.5),
+                            "turn_created": turn,
+                            "timestamp": time.time(),
+                        }
+                    }
+
+                    # 存储到 Store
+                    store.put(
+                        (world_id, category),
+                        key,
+                        value,
+                    )
+                    stored_count += 1
+                    logger.debug(f"记忆已存储到 Store: {category}/{key}")
+                except Exception as e:
+                    logger.error(f"Store 记忆存储失败: {e}")
+        except Exception as e:
+            logger.warning(f"Store 不可用，回退到 MemoryRepo: {e}")
+
+    # ===== 降级方案：使用旧的 MemoryRepo =====
+    if stored_count == 0 and memory_updates:
+        try:
+            from core.models import MemoryRepo
+            repo = MemoryRepo()
+            for mem in memory_updates:
+                try:
+                    repo.store(
+                        world_id=int(world_id),
+                        category=mem.get("category", "session"),
+                        source=mem.get("source", "agent"),
+                        content=mem.get("content", ""),
+                        title=mem.get("title", ""),
+                        importance=mem.get("importance", 0.5),
+                        turn=turn,
+                    )
+                    stored_count += 1
+                except Exception as e:
+                    logger.error(f"MemoryRepo 存储失败: {e}")
+        except Exception as e:
+            logger.error(f"MemoryRepo 不可用: {e}")
 
     event_bus.emit(create_node_event("update_memory", "completed", {
         "stored": stored_count,
@@ -408,8 +513,8 @@ def _get_system_prompt() -> str:
             project_prompt = project_manager.load_prompt("system")
             if project_prompt:
                 return project_prompt
-    except Exception:
-        pass  # 加载失败时使用默认 prompt
+    except Exception as e:
+        logger.debug(f"项目提示词加载失败: {e}")  # 加载失败时使用默认 prompt
 
     # 默认硬编码 prompt
     return _DEFAULT_SYSTEM_PROMPT

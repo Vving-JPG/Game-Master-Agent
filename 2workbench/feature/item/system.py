@@ -5,7 +5,7 @@ from typing import Any
 
 from foundation.logger import get_logger
 from feature.base import BaseFeature
-from core.models import ItemRepo, PlayerRepo, Item, ItemType, ItemRarity
+from core.models import ItemRepo, PlayerRepo, Item
 
 logger = get_logger(__name__)
 
@@ -22,8 +22,8 @@ class ItemSystem(BaseFeature):
 
     def _on_command_executed(self, event) -> None:
         """处理 AI 命令"""
-        intent = event.get("intent", "")
-        params = event.get("params", {})
+        intent = event.data.get("intent", "")
+        params = event.data.get("params", {})
 
         if intent == "give_item":
             player_id = params.get("player_id", 1)

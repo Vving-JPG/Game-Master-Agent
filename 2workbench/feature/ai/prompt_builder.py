@@ -14,7 +14,7 @@ from typing import Any
 
 from foundation.llm import LLMMessage
 from foundation.logger import get_logger
-from core.models import MemoryRepo, PromptRepo
+from core.models import MemoryRepo
 from core.state import AgentState
 
 logger = get_logger(__name__)
@@ -34,8 +34,7 @@ class PromptBuilder:
     """
 
     def __init__(self):
-        self._system_prompt_cache: str | None = None
-        self._system_prompt_key: str | None = None
+        pass
 
     def build(
         self,
@@ -158,8 +157,8 @@ class PromptBuilder:
                     if location.connections:
                         exits = ", ".join([f"{d}" for d in location.connections.keys()])
                         parts.append(f"  可用出口: {exits}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"地点详情获取失败: {e}")
 
         # 当前场景 NPC 详情
         active_npcs = state.get("active_npcs", [])
@@ -177,8 +176,8 @@ class PromptBuilder:
                             parts.append(f"\n**NPC {npc.name}**: 心情={npc.mood}, 说话风格={npc.speech_style or '未知'}")
                             if npc.backstory:
                                 parts.append(f"  背景: {npc.backstory[:100]}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"NPC 详情获取失败: {e}")
 
         return "\n".join(parts)
 

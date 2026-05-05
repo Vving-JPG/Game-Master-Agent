@@ -77,16 +77,16 @@ class ApiTestWorker(threading.Thread):
             )
 
             async def do_test():
-                for _ in range(100):  # 最长约20秒
-                    if self._stop_event.is_set():
-                        return None
-                    await asyncio.sleep(0.2)
-                response = await client.chat_async(
-                    messages=[LLMMessage(role="user", content="Hello, reply with 'OK'")],
-                    temperature=0.1,
-                    max_tokens=50,
-                )
-                return response
+                # 直接调用 API，client 已有 timeout 设置
+                try:
+                    response = await client.chat_async(
+                        messages=[LLMMessage(role="user", content="Hello, reply with 'OK'")],
+                        temperature=0.1,
+                        max_tokens=50,
+                    )
+                    return response
+                except asyncio.TimeoutError:
+                    return None
 
             response = loop.run_until_complete(do_test())
             loop.close()

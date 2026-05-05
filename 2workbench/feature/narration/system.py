@@ -5,7 +5,7 @@ from typing import Any
 
 from foundation.logger import get_logger
 from feature.base import BaseFeature
-from core.models import MemoryRepo, MemoryCategory
+from core.models import MemoryRepo
 
 logger = get_logger(__name__)
 

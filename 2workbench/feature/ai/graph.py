@@ -89,6 +89,3 @@ def build_gm_graph() -> StateGraph:
 
 # 全局编译好的图实例
 gm_graph = build_gm_graph()
-
-# 别名（兼容旧代码）
-default_graph = gm_graph

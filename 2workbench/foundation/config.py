@@ -5,11 +5,9 @@
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from foundation.logger import get_logger

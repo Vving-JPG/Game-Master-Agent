@@ -225,7 +225,7 @@ class CenterPanel(BaseWidget):
 
         # 编辑器标签页（默认隐藏，打开项目后显示）
         # 管理器改造后的标签页
-        self._graph_viewer = None      # 图查看器（只读）
+        # Note: _graph_viewer 已移除，使用 LangGraph Studio 替代（运行: langgraph dev）
         self._prompt_manager = None    # 提示词管理器
         self._skill_manager = None     # Skill 管理器
         self._runtime_panel = None     # 运行控制台
@@ -274,9 +274,7 @@ class CenterPanel(BaseWidget):
         self.tab_widget.removeTab(index)
         
         # 如果是编辑器标签页，清理引用
-        if widget == self._graph_viewer:
-            self._graph_viewer = None
-        elif widget == self._prompt_manager:
+        if widget == self._prompt_manager:
             self._prompt_manager = None
         elif widget == self._skill_manager:
             self._skill_manager = None
@@ -296,15 +294,22 @@ class CenterPanel(BaseWidget):
         return self.tab_widget.currentWidget()
 
     def show_graph_viewer(self, graph_data: dict | None = None) -> None:
-        """显示图查看器标签页（只读）"""
-        from presentation.editor.graph_editor import GraphEditorWidget
-        if self._graph_viewer is None:
-            self._graph_viewer = GraphEditorWidget(readonly=True)
-            self.tab_widget.addTab(self._graph_viewer, "📊 图查看")
-        if graph_data:
-            self._graph_viewer.load_graph(graph_data)
-        idx = self.tab_widget.indexOf(self._graph_viewer)
-        self.tab_widget.setCurrentIndex(idx)
+        """显示图查看器 — 已改用 LangGraph Studio
+
+        在终端运行: langgraph dev
+        浏览器打开: http://localhost:8123
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle("图可视化")
+        msg.setText("图可视化已改用 LangGraph Studio")
+        msg.setInformativeText(
+            "请在终端运行以下命令启动可视化界面:\n\n"
+            "langgraph dev\n\n"
+            "然后在浏览器打开: http://localhost:8123"
+        )
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.exec()
 
     def show_prompt_manager(self, prompts: dict[str, str] | None = None) -> None:
         """显示提示词管理器标签页"""
@@ -930,14 +935,12 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # 保存图编辑器
-            if self.center_panel._graph_editor:
-                graph_data = self.center_panel._graph_editor.get_graph()
-                project_manager.save_graph(graph_data)
+            # Note: 图编辑器已改用 LangGraph Studio，不再保存
+            # 图配置保存在 graph.json 中，由项目直接管理
 
             # 保存 Prompt 编辑器
-            if self.center_panel._prompt_editor:
-                prompts = self.center_panel._prompt_editor.get_prompts()
+            if self.center_panel._prompt_manager:
+                prompts = self.center_panel._prompt_manager.get_prompts()
                 for name, content in prompts.items():
                     project_manager.save_prompt(name, content)
 
@@ -1318,7 +1321,7 @@ class MainWindow(QMainWindow):
                     ("📁 新建项目", "new_project", "Ctrl+N"),
                     ("📂 打开项目", "open_project", "Ctrl+O"),
                     ("💾 保存", "save", "Ctrl+S"),
-                    ("🔧 图查看器", "show_graph", ""),
+                    ("🔧 图查看器 (Studio)", "show_graph", ""),
                     ("📝 提示词管理器", "show_prompt", ""),
                     ("🎯 Skill 管理器", "show_skills", ""),
                     ("▶️ 运行控制台", "show_runtime", ""),

@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from foundation.database import get_db
 from foundation.logger import get_logger
@@ -30,8 +30,6 @@ from core.models.entities import (
 )
 
 logger = get_logger(__name__)
-
-T = TypeVar("T")  # Pydantic 模型类型
 
 
 class BaseRepository:

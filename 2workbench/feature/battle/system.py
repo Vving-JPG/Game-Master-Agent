@@ -22,7 +22,7 @@ from core.calculators import (
     Combatant, AttackResult, CombatResult,
     attack, combat_round, is_combat_over, calculate_rewards,
 )
-from core.models import PlayerRepo, LogRepo
+from core.models import PlayerRepo
 
 logger = get_logger(__name__)
 
@@ -50,10 +50,10 @@ class BattleSystem(BaseFeature):
 
     def _on_command_executed(self, event: Event) -> None:
         """监听 AI 层的命令执行，处理战斗相关命令"""
-        result = event.get("result", {})
-        intent = event.get("intent", "")
+        result = event.data.get("result", {})
+        intent = event.data.get("intent", "")
         if intent == "start_combat":
-            self.start_combat(event.get("params", {}))
+            self.start_combat(event.data.get("params", {}))
 
     def start_combat(self, params: dict[str, Any]) -> BattleState:
         """开始战斗

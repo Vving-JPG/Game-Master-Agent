@@ -401,6 +401,7 @@ class PromptEditorWidget(BaseWidget):
                 self.max_tokens = max_tokens
                 self.system_prompt = system_prompt
                 self.user_message = user_message
+                self._should_stop = False
 
             def run(self):
                 try:
@@ -428,6 +429,8 @@ class PromptEditorWidget(BaseWidget):
                             temperature=self.temperature,
                             max_tokens=self.max_tokens
                         ):
+                            if self._should_stop:
+                                break
                             if event.type == "token":
                                 self.token_received.emit(event.content)
                             elif event.type == "error":
@@ -510,8 +513,13 @@ class PromptEditorWidget(BaseWidget):
     def _stop_stream(self):
         """停止流式输出"""
         if hasattr(self, '_stream_thread') and self._stream_thread.isRunning():
-            self._stream_thread.terminate()
-            self._stream_thread.wait()
+            # 使用协作式停止而非 terminate()
+            if hasattr(self._stream_thread, '_should_stop'):
+                self._stream_thread._should_stop = True
+            self._stream_thread.wait(2000)  # 等待2秒
+            if self._stream_thread.isRunning():
+                self._stream_thread.terminate()
+                self._stream_thread.wait()
         self._btn_test.setEnabled(True)
         self._btn_test.setText("🧪 测试")
         if hasattr(self, '_stream_dialog'):

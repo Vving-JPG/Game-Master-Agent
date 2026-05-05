@@ -110,6 +110,11 @@ class BaseLLMClient(ABC):
         """
         ...
 
+    def __init__(self):
+        """初始化 Token 统计"""
+        self._prompt_tokens: int = 0
+        self._completion_tokens: int = 0
+
     def get_usage_stats(self) -> dict[str, int]:
         """获取 Token 使用统计"""
         return {
@@ -122,7 +127,3 @@ class BaseLLMClient(ABC):
         """重置 Token 统计"""
         self._prompt_tokens = 0
         self._completion_tokens = 0
-
-    # 子类需要初始化这些
-    _prompt_tokens: int = 0
-    _completion_tokens: int = 0

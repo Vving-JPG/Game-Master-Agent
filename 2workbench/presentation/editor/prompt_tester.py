@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLineEdit,
     QComboBox, QSlider, QLabel, QPushButton, QGroupBox,
     QSpinBox, QSplitter, QFrame, QMessageBox, QFileDialog,
+    QInputDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
 
@@ -386,7 +387,7 @@ class PromptTesterWidget(BaseWidget):
             QMessageBox.information(self, "提示", "没有可保存的对话")
             return
 
-        name, ok = QLineEdit.getText(self, "保存测试用例", "测试用例名称:")
+        name, ok = QInputDialog.getText(self, "保存测试用例", "测试用例名称:")
         if not ok or not name:
             return
 

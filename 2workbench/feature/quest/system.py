@@ -32,9 +32,9 @@ class QuestSystem(BaseFeature):
         self.subscribe("feature.ai.command.executed", self._on_command_executed)
 
     def _on_command_executed(self, event: Event) -> None:
-        intent = event.get("intent", "")
+        intent = event.data.get("intent", "")
         if intent in ("update_quest_status", "check_quest_prerequisites"):
-            self.handle_quest_command(intent, event.get("params", {}))
+            self.handle_quest_command(intent, event.data.get("params", {}))
 
     def create_from_template(
         self,

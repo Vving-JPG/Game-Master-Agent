@@ -24,15 +24,15 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-import logging
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any, Callable, Coroutine
 
-logger = logging.getLogger(__name__)
+from foundation.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class Priority(IntEnum):
@@ -104,7 +104,6 @@ class EventBus:
     def __init__(self):
         self._subscriptions: dict[str, list[_Subscription]] = defaultdict(list)
         self._lock = threading.Lock()
-        self._async_handlers: list[tuple[str, AsyncHandler]] = []
 
     def subscribe(
         self,
@@ -134,9 +133,6 @@ class EventBus:
             # 按优先级排序
             self._subscriptions[event_type].sort(key=lambda s: s.priority)
 
-        if asyncio.iscoroutinefunction(handler):
-            self._async_handlers.append((event_type, handler))
-
         logger.debug(f"事件订阅: {event_type} -> {handler.__qualname__} "
                      f"(priority={priority.name}, once={once})")
 
@@ -146,10 +142,6 @@ class EventBus:
             subs = self._subscriptions.get(event_type, [])
             self._subscriptions[event_type] = [
                 s for s in subs if s.handler is not handler
-            ]
-            self._async_handlers = [
-                (et, h) for et, h in self._async_handlers
-                if not (et == event_type and h is handler)
             ]
         logger.debug(f"取消订阅: {event_type} -> {handler.__qualname__}")
 
@@ -287,7 +279,6 @@ class EventBus:
         """清除所有订阅"""
         with self._lock:
             self._subscriptions.clear()
-            self._async_handlers.clear()
         logger.info("事件总线已清除所有订阅")
 
     def get_subscriptions(self) -> dict[str, int]:

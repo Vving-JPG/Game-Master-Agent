@@ -60,7 +60,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                 provider_name = provider_name or settings.default_provider or "deepseek"
                 api_key = api_key or getattr(settings, f"{provider_name}_api_key", "")
                 base_url = base_url or getattr(settings, f"{provider_name}_base_url", "")
-                model = model or settings.default_model or "deepseek-chat"
+                model = model or settings.deepseek_model or "deepseek-chat"
             except Exception:
                 pass
 
@@ -73,16 +73,6 @@ class OpenAICompatibleClient(BaseLLMClient):
             api_key=api_key or "dummy-key",
             base_url=base_url or "https://api.openai.com",
             timeout=timeout,
-        )
-
-        self._retry_decorator = retry(
-            retry=retry_if_exception_type(Exception),
-            stop=stop_after_attempt(max_retries),
-            wait=wait_exponential(multiplier=1, min=1, max=10),
-            before_sleep=lambda retry_state: logger.warning(
-                f"LLM 重试 ({retry_state.attempt_number}/{max_retries}): "
-                f"{retry_state.outcome.exception()}"
-            ),
         )
 
     @property
